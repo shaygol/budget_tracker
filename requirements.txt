@@ -1,0 +1,6 @@
+# ===== requirements.txt =====
+# Dependencies
+pandas
+openpyxl
+python-bidi
+arabic-reshaper
