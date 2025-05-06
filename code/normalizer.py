@@ -2,7 +2,8 @@
 import pandas as pd
 import logging
 import re
-from code.utils import rtl
+#from code.utils import format_prompt
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +76,10 @@ class Normalizer:
 
         logger.debug("Normalization complete.")
         return df
+
+    def normalize_text(text):
+        if not isinstance(text, str):
+            return text
+        text = text.strip()
+        text = unicodedata.normalize('NFKC', text)
+        return text

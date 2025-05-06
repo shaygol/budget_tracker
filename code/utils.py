@@ -1,8 +1,6 @@
 # ===== code/utils.py =====
 import os
 import logging
-from bidi.algorithm import get_display
-import arabic_reshaper
 from openpyxl import load_workbook
 from zipfile import BadZipFile
 
@@ -12,11 +10,12 @@ def ensure_dirs(dirs):
     for d in dirs:
         os.makedirs(d, exist_ok=True)
 
-def rtl(text):
+def format_prompt(text):
     # return '\u200f' + text
     # return text[::-1]
-    reshaped_text = arabic_reshaper.reshape(text)
-    return get_display(reshaped_text)
+    #reshaped_text = arabic_reshaper.reshape(text)
+    #return get_display(reshaped_text)
+    return text
 
 def is_valid_excel_file(path: str) -> bool:
     """

@@ -1,167 +1,173 @@
-
-# ===== code/dashboard_writer.py =====
 import pandas as pd
 import os
-from openpyxl import load_workbook
-from openpyxl.styles import Font, Alignment
 import logging
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
+from shutil import copyfile
 from code.utils import is_valid_excel_file
+from openpyxl.worksheet.worksheet import Worksheet
 
 logger = logging.getLogger(__name__)
+
 
 class DashboardWriter:
     def __init__(self, dashboard_path):
         self.dashboard_path = dashboard_path
+        self.template_sheet_name = "Template"
+        self.user_decisions = {}
 
-    def update(self, summary_df: pd.DataFrame) -> None:
-        # Ensure necessary columns are present in the summary DataFrame
-        required_cols = {'year', 'month', 'category', 'subcat', 'monthly_amount'}
-        if not required_cols.issubset(summary_df.columns):
-            logger.error(f"Missing required columns: {required_cols - set(summary_df.columns)}")
+    def update(self, summary_df: pd.DataFrame):
+        if not self._validate_summary(summary_df):
             return
 
-        # Define month numbers (1, 2, 3, ..., 12)
-        all_months = [str(m) for m in range(1, 13)]
-
-        # Extract all categories and subcategories from the dataset
-        all_categories = summary_df['category'].unique()
-        all_subcategories = summary_df['subcat'].unique()
-
         years = sorted(summary_df['year'].unique())
-
-        # Check if file exists, and determine mode
         file_exists = os.path.exists(self.dashboard_path)
-        if file_exists and is_valid_excel_file(self.dashboard_path):
-            mode = 'a'  # append mode if the file exists
-        else:
-            mode = 'w'  # write mode if the file does not exist (new file)
 
-        # Writing data to the Excel file
-        with pd.ExcelWriter(self.dashboard_path, engine='openpyxl', mode=mode) as writer:
-            for yr in years:
-                df_year = summary_df[summary_df['year'] == yr]
-                rows = []
+        if not file_exists:
+            logger.error(f"Dashboard file not found: {self.dashboard_path}")
+            return
 
-                # Loop through each category (grouped by category)
-                for category in all_categories:
-                    # Add the category row only once, leaving the subcategories to follow
-                    rows.append([category] + [''] * (len(all_months) + 1))  # Empty cells for subcategories
-
-                    # Find the subcategories for the category, whether they have data or not
-                    subcats_for_category = df_year[df_year['category'] == category]['subcat'].unique()
-                    for subcat in all_subcategories:
-                        if subcat in subcats_for_category:
-                            subcat_df = df_year[(df_year['category'] == category) & (df_year['subcat'] == subcat)]
-                            row = ['', "    " + subcat] + [0] * 12  # Initialize the row with 0s for each month
-                            for _, r in subcat_df.iterrows():
-                                month_idx = int(r['month']) - 1  # Adjust to 0-based index
-                                row[2 + month_idx] = r['monthly_amount']  # Set the month value
-                            rows.append(row)
-                        else:
-                            # If no data for this subcategory, add an empty row with zeros
-                            rows.append(['', "    " + subcat] + [0] * 12)
-
-                # Create the DataFrame for this year
-                result_df = pd.DataFrame(rows, columns=['נושא', 'פירוט הוצאות'] + all_months)
-
-                # Ensure that if the sheet already exists, we don't overwrite it in append mode
-                if file_exists:
-                    # Load existing workbook to append new data
-                    book = load_workbook(self.dashboard_path)
-                    if str(int(yr)) in book.sheetnames:
-                        logger.info(f"Sheet for {yr} already exists. Appending data.")
-                    else:
-                        result_df.to_excel(writer, sheet_name=str(int(yr)), index=False)
-                else:
-                    result_df.to_excel(writer, sheet_name=str(int(yr)), index=False)
-
-        # Apply formatting after writing
-        self._format_excel(years)
-
-    def _format_excel(self, years):
         wb = load_workbook(self.dashboard_path)
-        for yr in years:
-            ws = wb[str(int(yr))]
+        if self.template_sheet_name not in wb.sheetnames:
+            logger.error(f"Template sheet '{self.template_sheet_name}' not found in dashboard.")
+            return
 
-            # Set RTL (Right-to-left) for Hebrew layout
-            ws.sheet_view.rightToLeft = True
-
-            # Format header row with bold font
-            header_font = Font(bold=True)
-            for cell in ws[1]:
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal='center')
-
-            # Bold category rows (rows where column A is not empty)
-            for row in ws.iter_rows(min_row=2):
-                if row[0].value:  # Check if the category cell is not empty
-                    for cell in row:
-                        cell.font = Font(bold=True)
-
-            # Adjust column widths based on content
-            for col in ws.columns:
-                max_len = max(len(str(cell.value)) if cell.value else 0 for cell in col)
-                col_letter = col[0].column_letter  # Get column name (A, B, C...)
-                ws.column_dimensions[col_letter].width = max(10, max_len + 2)
+        # First pass: create sheets per year if missing
+        for year in years:
+            sheet_name = str(year)
+            if sheet_name not in wb.sheetnames:
+                self._clone_template_sheet(wb, sheet_name)
 
         wb.save(self.dashboard_path)
-        logger.info("Excel formatting applied.")
+        wb.close()
 
+        # Second pass: update each year's sheet
+        for year in years:
+            self._update_sheet(year, summary_df[summary_df['year'] == year])
 
+    def _validate_summary(self, df: pd.DataFrame) -> bool:
+        required_cols = {'year', 'month', 'category', 'subcat', 'monthly_amount'}
+        if not required_cols.issubset(df.columns):
+            logger.error(f"Missing required columns: {required_cols - set(df.columns)}")
+            return False
+        if df.empty:
+            logger.warning("Summary DataFrame is empty. Nothing will be written to the dashboard.")
+            return False
+        return True
 
+    def _clone_template_sheet(self, wb, new_sheet_name: str):
+        source = wb[self.template_sheet_name]
+        target = wb.copy_worksheet(source)
+        target.title = new_sheet_name
+        logger.info(f"Created new sheet by cloning template: {new_sheet_name}")
 
-# Version 1.0: Work but messy
-#import pandas as pd
-#import logging
-#import os
-#from code.utils import is_valid_excel_file
-#
-#logger = logging.getLogger(__name__)
-#
-#class DashboardWriter:
-#    def __init__(self, dashboard_path):
-#        self.dashboard_path = dashboard_path
-#
-#    def update(self, summary_df: pd.DataFrame) -> None:
-#        years = summary_df['year'].unique()
-#
-#        file_exists = os.path.exists(self.dashboard_path)
-#        mode = 'a' if file_exists and is_valid_excel_file(self.dashboard_path) else 'w'
-#
-#        if mode == 'w':
-#            logger.warning("Dashboard file not found or invalid. A new file will be created.")
-#
-#        with pd.ExcelWriter(self.dashboard_path, engine='openpyxl', mode=mode, if_sheet_exists='overlay') as writer:
-#            for yr in years:
-#                sheet = str(int(yr))
-#                year_data = summary_df[summary_df['year'] == yr]
-#
-#                try:
-#                    existing = pd.read_excel(self.dashboard_path, sheet_name=sheet)
-#                except Exception:
-#                    existing = pd.DataFrame(columns=['category', 'subcat'] + [str(m) for m in range(1, 13)] + ['avg_monthly', 'cumulative'])
-#
-#                for _, row in year_data.iterrows():
-#                    cond = (existing['category'] == row['category']) & (existing['subcat'] == row['subcat'])
-#                    col = str(int(row['month']))
-#
-#                    if cond.any():
-#                        existing.loc[cond, col] = row['monthly_amount']
-#                    else:
-#                        new = pd.DataFrame([{
-#                            'category': row['category'],
-#                            'subcat': row['subcat'],
-#                            **{str(m): 0 for m in range(1, 13)},
-#                            col: row['monthly_amount']
-#                        }])
-#                        existing = pd.concat([existing, new], ignore_index=True)
-#
-#                # Calculate average and cumulative
-#                existing['avg_monthly'] = existing[[str(m) for m in range(1, 13)]].mean(axis=1)
-#                existing['cumulative'] = existing[[str(m) for m in range(1, 13)]].sum(axis=1)
-#
-#                existing.to_excel(writer, sheet_name=sheet, index=False)
-#                logger.info(f"Updated sheet {sheet}")
-#
-#        logger.info("Dashboard update completed successfully.")
-#
+    def _update_sheet(self, year: int, df: pd.DataFrame):
+        wb = load_workbook(self.dashboard_path)
+        sheet_name = str(year)
+        ws = wb[sheet_name]
+
+        # Map month numbers to column indexes (e.g., Jan -> col 3)
+        month_columns = {str(m): 2 + (m - 1) for m in range(1, 13)}
+
+        # Build mapping of existing subcategories to rows
+        category_ranges = self._get_category_row_ranges(ws)
+        existing_map = self._build_subcat_location_map(ws, category_ranges)
+
+        for _, row in df.iterrows():
+            cat = row['category']
+            subcat = row['subcat']
+            month = str(int(row['month']))
+            amount = row['monthly_amount']
+            col = month_columns[month]
+
+            if cat not in category_ranges:
+                logger.info(f"New category detected: {cat}. Adding it.")
+                self._add_new_category(ws, cat)
+                category_ranges = self._get_category_row_ranges(ws)
+
+            if (cat, subcat) not in existing_map:
+                logger.info(f"New subcategory '{subcat}' under '{cat}' detected. Adding it.")
+                self._add_new_subcategory(ws, cat, subcat, existing_map, category_ranges)
+                existing_map = self._build_subcat_location_map(ws, category_ranges)
+
+            row_idx = existing_map[(cat, subcat)]
+            cell = ws.cell(row=row_idx, column=col + 1)
+            existing_value = cell.value or 0
+
+            month_key = f"{year}-{month}"
+            if month_key not in self.user_decisions:
+                decision = self._prompt_user_decision(month_key)
+                self.user_decisions[month_key] = decision
+            else:
+                decision = self.user_decisions[month_key]
+
+            if decision == "override":
+                cell.value = amount
+            elif decision == "add":
+                try:
+                    cell.value = (float(existing_value) if existing_value else 0) + amount
+                except Exception:
+                    cell.value = amount
+            elif decision == "skip":
+                continue
+
+        wb.save(self.dashboard_path)
+        wb.close()
+        logger.info(f"Dashboard sheet updated for year {year}")
+
+    def _prompt_user_decision(self, month_key: str) -> str:
+        print(f"\nData already exists for {month_key}. Choose how to handle it:")
+        print("1. Override existing data")
+        print("2. Add to existing data")
+        print("3. Skip this month")
+        choice = input("Enter 1/2/3: ").strip()
+        return {"1": "override", "2": "add", "3": "skip"}.get(choice, "skip")
+
+    def _get_category_row_ranges(self, ws: Worksheet):
+        # Returns a map: category name -> (start_row, end_row)
+        ranges = {}
+        current_cat = None
+        start = None
+        for idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
+            cat_cell = row[0]
+            if cat_cell.value:
+                if current_cat and start:
+                    ranges[current_cat] = (start, idx - 1)
+                current_cat = cat_cell.value
+                start = idx
+        if current_cat and start:
+            ranges[current_cat] = (start, idx)
+        return ranges
+
+    def _build_subcat_location_map(self, ws: Worksheet, cat_ranges: dict):
+        # Returns a map: (category, subcategory) -> row index
+        mapping = {}
+        for cat, (start, end) in cat_ranges.items():
+            for r in range(start, end + 1):
+                subcat_cell = ws.cell(row=r, column=2)
+                val = subcat_cell.value
+                if isinstance(val, str):
+                    mapping[(cat, val.strip())] = r
+        return mapping
+
+    def _add_new_category(self, ws: Worksheet, category: str):
+        # Adds a new row for a new category at the bottom
+        last_row = ws.max_row + 1
+        ws.insert_rows(last_row)
+        ws.cell(row=last_row, column=1, value=category)
+        for col in range(2, 15):
+            ws.cell(row=last_row, column=col, value="")
+
+    def _add_new_subcategory(self, ws: Worksheet, category: str, subcat: str,
+                             subcat_map: dict, cat_ranges: dict):
+        # Inserts a subcategory row below the existing category group
+        start, end = cat_ranges[category]
+        insert_at = end + 1
+        ws.insert_rows(insert_at)
+        ws.cell(row=insert_at, column=2, value=subcat)
+        for col in range(3, 15):
+            ws.cell(row=insert_at, column=col, value="")
+        # Re-merge the category header cell to extend one more row
+        ws.unmerge_cells(start_row=start, end_row=end, start_column=1, end_column=1)
+        ws.merge_cells(start_row=start, end_row=end + 1, start_column=1, end_column=1)
+        cat_ranges[category] = (start, end + 1)

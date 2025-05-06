@@ -1,7 +1,7 @@
 # ===== code/previewer.py =====
 import pandas as pd
 import logging
-from code.utils import rtl
+from code.utils import format_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +17,9 @@ class Previewer:
             .reset_index()
         )
         print("\n--- Preview Summary ---")
-        # Apply RTL display only to Hebrew columns
-        summary['category'] = summary['category'].apply(lambda x: rtl(str(x)) if isinstance(x, str) else x)
-        summary['subcat'] = summary['subcat'].apply(lambda x: rtl(str(x)) if isinstance(x, str) else x)
+        # Apply format_prompt display only to Hebrew columns
+        summary['category'] = summary['category'].apply(lambda x: format_prompt(str(x)) if isinstance(x, str) else x)
+        summary['subcat'] = summary['subcat'].apply(lambda x: format_prompt(str(x)) if isinstance(x, str) else x)
         print(summary.to_string(index=False))
 
         input("\nPress Enter to confirm and update the dashboard...")

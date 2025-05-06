@@ -4,7 +4,8 @@ import logging
 from typing import List, Tuple
 import pandas as pd
 from openpyxl import load_workbook
-from code.utils import rtl
+from code.utils import format_prompt
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class CategoryManager:
         self.dashboard_path = dashboard_path
 
         self.category_map = self._load_category_map()
-        self.valid_categories = self._load_template_categories()
+        self.valid_categories = self.load_category_structure_from_template()
 
     def _load_category_map(self) -> dict:
         try:
@@ -25,34 +26,48 @@ class CategoryManager:
             logger.warning(f"Categories file not found or invalid: {self.categories_path}. Starting with empty map.")
             return {}
 
-    def _load_template_categories(self) -> dict:
-        wb = load_workbook(self.dashboard_path, read_only=True, data_only=True)
+    def load_category_structure_from_template(self) -> dict:
+        """
+        Loads the category structure from the 'Template' sheet in the given Excel dashboard.
+        Skips header rows and supports merged cells in the first column for categories.
+        """
+        wb = load_workbook(self.dashboard_path, data_only=True)
         try:
-            ws = wb['Template']
+            ws = wb["Template"]
         except KeyError:
             logger.error("The worksheet 'Template' does not exist in the dashboard file.")
             raise ValueError("Missing 'Template' worksheet in the dashboard. Please ensure it exists and is named correctly.")
 
         categories = {}
-        current_cat = None
-        for row in ws.iter_rows(min_row=2, max_col=2):
+        current_category = None
+
+        for row in ws.iter_rows(min_row=2, max_col=2):  # skip row 1 (headers)
             cat_cell, subcat_cell = row
             cat_val = cat_cell.value
             subcat_val = subcat_cell.value
 
-            if cat_val:
-                current_cat = str(cat_val).strip()
-                categories[current_cat] = []
+            # Skip rows that look like headers
+            if str(cat_val).strip() in ["נושא", "נושא הוצאה"] or str(subcat_val).strip() in ["פירוט", "פירוט הוצאות"]:
+                continue
 
-            if subcat_val and current_cat:
-                categories[current_cat].append(str(subcat_val).strip())
+            # Detect new category
+            if cat_val and str(cat_val).strip():
+                current_category = str(cat_val).strip()
+                if current_category not in categories:
+                    categories[current_category] = []
+
+            # Add subcategory
+            if subcat_val and current_category:
+                subcategory = str(subcat_val).strip()
+                categories[current_category].append(subcategory)
 
         logger.info("=== Current category structure from Template ===")
-        for cat, subs in categories.items():
-            logger.info(f"{cat}: {subs}")
+        for category, subcategories in categories.items():
+            logger.info(f"{category}: {subcategories}")
         logger.info("===============================================")
 
         return categories
+
 
 
     def map_categories(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -70,9 +85,9 @@ class CategoryManager:
 
         try:
             for merchant in unknown:
-                print(rtl(f"New merchant detected: {merchant}"))
+                print(format_prompt(f"New merchant detected: {merchant}"))
                 for idx, (cat, sub) in enumerate(flat_choices, start=1):
-                    print(rtl(f"{idx}. {cat} > {sub}"))
+                    print(format_prompt(f"{idx}. {cat} > {sub}"))
                 while True:
                     choice = input("Select category number (or 'exit'): ").strip().lower()
                     if choice == "exit":
@@ -80,7 +95,7 @@ class CategoryManager:
                         self.save_categories()
                         sys.exit()
                     elif not choice.isdigit():
-                        print(rtl("Please enter a number."))
+                        print(format_prompt("Please enter a number."))
                         continue
                     idx = int(choice)
                     if 1 <= idx <= len(flat_choices):
@@ -90,9 +105,9 @@ class CategoryManager:
                         df.loc[df['merchant'] == merchant, 'subcat'] = sub
                         break
                     else:
-                        print(rtl("Choice out of range."))
+                        print(format_prompt("Choice out of range."))
         except KeyboardInterrupt:
-            print(rtl("Exiting, mapped categories not saved."))
+            print(format_prompt("Exiting, mapped categories not saved."))
             sys.exit()
         else:
             self.save_categories()
@@ -120,24 +135,24 @@ class CategoryManager:
         if not removed_pairs:
             return df
 
-        print(rtl("⚠️ Some previously used subcategories are no longer in the template."))
+        print(format_prompt("⚠️ Some previously used subcategories are no longer in the template."))
         flat_choices = [
             (cat, sub)
             for cat, subs in self.valid_categories.items()
             for sub in subs
         ]
         for idx, (cat, sub) in enumerate(flat_choices, start=1):
-            print(rtl(f"{idx}. {cat} > {sub}"))
+            print(format_prompt(f"{idx}. {cat} > {sub}"))
 
         for old_cat, old_sub in removed_pairs:
-            print(rtl(f"\nSubcategory no longer exists: {old_cat} > {old_sub}"))
+            print(format_prompt(f"\nSubcategory no longer exists: {old_cat} > {old_sub}"))
             while True:
                 choice = input("Choose a new category number for this data (or type 'exit'): ").strip().lower()
                 if choice == 'exit':
                     print("Exiting.")
                     sys.exit()
                 if not choice.isdigit():
-                    print(rtl("Please enter a number."))
+                    print(format_prompt("Please enter a number."))
                     continue
                 idx = int(choice)
                 if 1 <= idx <= len(flat_choices):
@@ -148,7 +163,7 @@ class CategoryManager:
                     logger.info(f"Reassigned {mask.sum()} records from {old_cat} > {old_sub} to {new_cat} > {new_sub}")
                     break
                 else:
-                    print(rtl("Choice out of range."))
+                    print(format_prompt("Choice out of range."))
 
         return df
 
