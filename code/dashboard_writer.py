@@ -4,7 +4,7 @@ import logging
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from shutil import copyfile
-from code.utils import is_valid_excel_file
+from code.file_manager import is_valid_excel_file
 from openpyxl.worksheet.worksheet import Worksheet
 
 logger = logging.getLogger(__name__)

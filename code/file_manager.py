@@ -1,5 +1,8 @@
-# ===== code/file_loader.py =====
+# ===== code/file_manager.py =====
+import os
 from pathlib import Path
+from zipfile import BadZipFile
+from openpyxl import load_workbook
 import pandas as pd
 import logging
 from typing import List
@@ -40,3 +43,21 @@ def load_transaction_files(transactions_dir: str) -> List[pd.DataFrame]:
         except Exception as e:
             logger.error(f"Failed to load {file_path.name}: {e}")
     return dataframes
+
+def is_valid_excel_file(path: str) -> bool:
+    """
+    Check if the given path points to a valid Excel (.xlsx) file.
+    """
+    if not os.path.exists(path):
+        return False
+    try:
+        # Try to open it as an Excel workbook
+        load_workbook(path)
+        return True
+    except (BadZipFile, OSError, ValueError):
+        logger.debug('Failed to open workbook')
+        return False
+    
+def ensure_dirs(dirs):
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)

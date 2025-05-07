@@ -4,8 +4,7 @@ import logging
 from typing import List, Tuple
 import pandas as pd
 from openpyxl import load_workbook
-from code.utils import format_prompt
-from pathlib import Path
+from code.previewer import format_prompt
 
 logger = logging.getLogger(__name__)
 

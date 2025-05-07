@@ -2,7 +2,6 @@
 import pandas as pd
 import logging
 import re
-#from code.utils import format_prompt
 import unicodedata
 
 logger = logging.getLogger(__name__)
