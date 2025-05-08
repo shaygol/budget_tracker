@@ -2,9 +2,6 @@ import pandas as pd
 import os
 import logging
 from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
-from shutil import copyfile
-from code.file_manager import is_valid_excel_file
 from openpyxl.worksheet.worksheet import Worksheet
 
 logger = logging.getLogger(__name__)
@@ -59,6 +56,7 @@ class DashboardWriter:
         source = wb[self.template_sheet_name]
         target = wb.copy_worksheet(source)
         target.title = new_sheet_name
+        target.sheet_view.rightToLeft = source.sheet_view.rightToLeft
         logger.info(f"Created new sheet by cloning template: {new_sheet_name}")
 
     def _update_sheet(self, year: int, df: pd.DataFrame):
@@ -92,28 +90,33 @@ class DashboardWriter:
 
             row_idx = existing_map[(cat, subcat)]
             cell = ws.cell(row=row_idx, column=col + 1)
-            existing_value = cell.value or 0
+            existing_value = cell.value
 
-            month_key = f"{year}-{month}"
-            if month_key not in self.user_decisions:
-                decision = self._prompt_user_decision(month_key)
-                self.user_decisions[month_key] = decision
-            else:
-                decision = self.user_decisions[month_key]
+            if existing_value is not None and existing_value != 0:
+                month_key = f"{year}-{month}"
+                if month_key not in self.user_decisions:
+                    decision = self._prompt_user_decision(month_key)
+                    self.user_decisions[month_key] = decision
+                else:
+                    decision = self.user_decisions[month_key]
 
-            if decision == "override":
-                cell.value = amount
-            elif decision == "add":
-                try:
-                    cell.value = (float(existing_value) if existing_value else 0) + amount
-                except Exception:
+                if decision == "override":
                     cell.value = amount
-            elif decision == "skip":
-                continue
+                elif decision == "add":
+                    try:
+                        cell.value = float(existing_value) + amount
+                    except Exception:
+                        cell.value = amount
+                elif decision == "skip":
+                    continue
+            else:
+                # No existing value, safe to write
+                cell.value = amount
 
         wb.save(self.dashboard_path)
         wb.close()
         logger.info(f"Dashboard sheet updated for year {year}")
+
 
     def _prompt_user_decision(self, month_key: str) -> str:
         print(f"\nData already exists for {month_key}. Choose how to handle it:")
