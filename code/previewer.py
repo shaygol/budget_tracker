@@ -24,7 +24,7 @@ class Previewer:
         summary['subcat'] = summary['subcat'].apply(lambda x: format_prompt(str(x)) if isinstance(x, str) else x)
         total = summary['monthly_amount'].sum()
         print(summary.to_string(index=False))
-        print(f"\nTotal Monthly Amount: {total:,.2f}")
+        print(f"\nTotal Amount: {total:,.2f}")
 
         input("\nPress Enter to confirm and update the dashboard...")
         logger.debug("User confirmed preview summary.")

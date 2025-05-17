@@ -1,13 +1,14 @@
 # ===== code/logger.py =====
 import logging
 import os
+from code.config import LOG_SEVERITY
 
 def setup_logging(log_dir: str, log_file_name: str) -> None:
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, log_file_name)
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(LOG_SEVERITY)
 
     formatter = logging.Formatter(
         '%(asctime)s [%(levelname)s] %(message)s',

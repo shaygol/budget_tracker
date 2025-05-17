@@ -2,7 +2,9 @@ import pandas as pd
 import os
 import logging
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font
 from openpyxl.worksheet.worksheet import Worksheet
+from code.config import TEMPLATE_SHEET_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,7 @@ logger = logging.getLogger(__name__)
 class DashboardWriter:
     def __init__(self, dashboard_path):
         self.dashboard_path = dashboard_path
-        self.template_sheet_name = "Template"
+        self.template_sheet_name = TEMPLATE_SHEET_NAME
         self.user_decisions = {}
 
     def update(self, summary_df: pd.DataFrame):
@@ -112,6 +114,9 @@ class DashboardWriter:
             else:
                 # No existing value, safe to write
                 cell.value = amount
+
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=False)
 
         wb.save(self.dashboard_path)
         wb.close()

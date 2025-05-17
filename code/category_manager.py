@@ -5,6 +5,7 @@ from typing import List, Tuple
 import pandas as pd
 from openpyxl import load_workbook
 from code.previewer import format_prompt
+from code.config import TEMPLATE_SHEET_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class CategoryManager:
         """
         wb = load_workbook(self.dashboard_path, data_only=True)
         try:
-            ws = wb["Template"]
+            ws = wb[TEMPLATE_SHEET_NAME]
         except KeyError:
             logger.error("The worksheet 'Template' does not exist in the dashboard file.")
             raise ValueError("Missing 'Template' worksheet in the dashboard. Please ensure it exists and is named correctly.")
@@ -84,9 +85,16 @@ class CategoryManager:
 
         try:
             for merchant in unknown:
+                # Show sample rows for that merchant
+                merchant_rows = df[df['merchant'] == merchant]
+                sample_row = merchant_rows.iloc[0] if not merchant_rows.empty else None
                 print(format_prompt(f"New merchant detected: {merchant}"))
+                if sample_row is not None:
+                    logger.debug(f"New merchant detected: {merchant} [date: {sample_row.get('month')}/{sample_row.get('year')}, file: {sample_row.get('source_file')}]")
+
                 for idx, (cat, sub) in enumerate(flat_choices, start=1):
                     print(format_prompt(f"{idx}. {cat} > {sub}"))
+
                 while True:
                     choice = input("Select category number (or 'exit'): ").strip().lower()
                     if choice == "exit":
@@ -117,6 +125,7 @@ class CategoryManager:
         logger.info("Category mapping complete.")
         return df
 
+
     def _handle_removed_subcategories(self, df: pd.DataFrame) -> pd.DataFrame:
         valid_subcats = {
             (cat, sub)
@@ -134,7 +143,7 @@ class CategoryManager:
         if not removed_pairs:
             return df
 
-        print(format_prompt("⚠️ Some previously used subcategories are no longer in the template."))
+        print(format_prompt("Some previously used subcategories are no longer in the template."))
         flat_choices = [
             (cat, sub)
             for cat, subs in self.valid_categories.items()

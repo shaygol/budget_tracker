@@ -3,10 +3,26 @@ import pandas as pd
 import logging
 import re
 import unicodedata
+from code.config import FILE_HEADER_KEYWORDS, MAPPING_HEADER_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
 class Normalizer:
+    @staticmethod
+    def build_rename_mapping(file_columns: list[str]) -> dict:
+        rename_map = {}
+        for internal_name, variants in FILE_HEADER_KEYWORDS.items():
+            for variant in variants:
+                if variant in file_columns:
+                    rename_map[variant] = internal_name  # מפתח: שם מהקובץ, ערך: שם פנימי סטנדרטי
+                    break
+
+        if MAPPING_HEADER_KEYWORDS != rename_map:
+            # TODO: need to fix
+            logger.debug(f'MAPPING_HEADER_KEYWORDS [{MAPPING_HEADER_KEYWORDS}], rename_map [{rename_map}]')
+            rename_map = MAPPING_HEADER_KEYWORDS
+        return rename_map
+
     @staticmethod
     def normalize(df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -41,14 +57,9 @@ class Normalizer:
         logger.debug(f"After ASCII lowercase:\n{list(df.columns)}\n")
 
         # 5. Rename mapping
-        mapping = {
-            'תאריך': 'transaction_date',
-            'חיוב לתאריך': 'charge_due_date',
-            'שם בית עסק': 'merchant',
-            'סכום חיוב בש\'\'ח': 'amount',
-            'סכום קנייה': 'purchase_amount',
-        }
-        df = df.rename(columns=mapping)
+        rename_map = Normalizer.build_rename_mapping(df.columns)
+        logger.debug(f"rename_map: {rename_map}\n")
+        df = df.rename(columns=rename_map)
         logger.debug(f"After renaming to standard names:\n{list(df.columns)}\n")
 
         # Ensure merchant exists
@@ -64,7 +75,7 @@ class Normalizer:
         df = df.dropna(subset=['merchant', 'transaction_date', 'amount'], how='any')
 
         # Convert types
-        df['transaction_date'] = pd.to_datetime(df['transaction_date'], errors='coerce')
+        df['transaction_date'] = pd.to_datetime(df['transaction_date'], errors='coerce', dayfirst=True)
         df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
         df = df.dropna(subset=['transaction_date', 'amount', 'merchant'])
 
