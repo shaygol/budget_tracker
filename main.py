@@ -6,6 +6,7 @@ from code.normalizer import Normalizer
 from code.category_manager import CategoryManager
 from code.previewer import Previewer
 from code.dashboard_writer import DashboardWriter
+from code.normalizer import Normalizer
 from code.config import OUTPUT_DIR, LOG_FILE_NAME, TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH
 
 def main():
@@ -18,8 +19,10 @@ def main():
             print("No valid transaction files found.")
             return
 
+        normalizer = Normalizer()
         df = pd.concat(dfs, ignore_index=True)
-        df = Normalizer.normalize(df)
+        df = normalizer.normalize(df)
+
 
         cat_mgr = CategoryManager(CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH)
         df = cat_mgr.map_categories(df)

@@ -16,11 +16,13 @@ def _detect_header_row(raw: pd.DataFrame) -> Optional[int]:
     """
     for i, row in raw.iterrows():
         line = ' '.join(str(cell) for cell in row)
-        has_card = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['card'])
-        has_date = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['transaction_date'])
-        has_amount = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['amount'])
-        has_merchant = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['merchant'])
-        if  has_card and has_date and has_amount and has_merchant:
+        has_date = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['mandatory']['transaction_date'])
+        has_merchant = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['mandatory']['merchant'])
+        has_amount = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['mandatory']['amount'])
+        has_card = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['optional']['card'])
+        has_misc = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['optional']['misc'])
+        flags = [has_card, has_date, has_amount, has_merchant, has_misc]
+        if  sum(flags) > len(FILE_HEADER_KEYWORDS['mandatory']):
             return i
 
     return None
