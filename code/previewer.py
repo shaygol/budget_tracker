@@ -8,7 +8,7 @@ def format_prompt(text):
     return text
 
 class Previewer:
-    def preview(self, df: pd.DataFrame) -> pd.DataFrame:
+    def preview(self, df: pd.DataFrame, confirm: bool = True) -> pd.DataFrame:
         """
         Display a monthly summary and confirm with the user.
         """
@@ -26,6 +26,7 @@ class Previewer:
         print(summary.to_string(index=False))
         print(f"\nTotal Amount: {total:,.2f}")
 
-        input("\nPress Enter to confirm and update the dashboard...")
-        logger.debug("User confirmed preview summary.")
+        if confirm:
+            input("\nPress Enter to confirm and update the dashboard...")
+            logger.debug("User confirmed preview summary.")
         return summary

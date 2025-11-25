@@ -15,9 +15,11 @@ class DashboardWriter:
         self.template_sheet_name = TEMPLATE_SHEET_NAME
         self.user_decisions = {}
 
-    def update(self, summary_df: pd.DataFrame):
+    def update(self, summary_df: pd.DataFrame, conflict_resolver=None):
         if not self._validate_summary(summary_df):
             return
+            
+        self.conflict_resolver = conflict_resolver
 
         years = sorted(summary_df['year'].unique())
         file_exists = os.path.exists(self.dashboard_path)
@@ -25,6 +27,17 @@ class DashboardWriter:
         if not file_exists:
             logger.error(f"Dashboard file not found: {self.dashboard_path}")
             return
+
+        # Create backup before modifying dashboard
+        import shutil
+        from datetime import datetime
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = f"{self.dashboard_path}.{timestamp}.backup"
+            shutil.copy2(self.dashboard_path, backup_path)
+            logger.info(f"Created backup: {backup_path}")
+        except Exception as e:
+            logger.warning(f"Failed to create backup: {e}")
 
         wb = load_workbook(self.dashboard_path)
         if self.template_sheet_name not in wb.sheetnames:
@@ -97,7 +110,7 @@ class DashboardWriter:
             if existing_value is not None and existing_value != 0:
                 month_key = f"{year}-{month}"
                 if month_key not in self.user_decisions:
-                    decision = self._prompt_user_decision(month_key)
+                    decision = self._prompt_user_decision(month_key, self.conflict_resolver)
                     self.user_decisions[month_key] = decision
                 else:
                     decision = self.user_decisions[month_key]
@@ -123,7 +136,11 @@ class DashboardWriter:
         logger.info(f"Dashboard sheet updated for year {year}")
 
 
-    def _prompt_user_decision(self, month_key: str) -> str:
+    def _prompt_user_decision(self, month_key: str, conflict_resolver=None) -> str:
+        # Use callback if provided (GUI mode), otherwise use input (CLI mode)
+        if conflict_resolver:
+            return conflict_resolver(month_key)
+            
         print(f"\nData already exists for {month_key}. Choose how to handle it:")
         print("1. Override existing data")
         print("2. Add to existing data")

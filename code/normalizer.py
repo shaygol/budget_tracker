@@ -99,6 +99,10 @@ class Normalizer:
         df = df.dropna(subset=['amount'])
 
         df['merchant'] = self._parse_str(df['merchant'])
+        
+        # Sanitize merchant names to prevent formula injection
+        from code.validators import sanitize_merchant_name
+        df['merchant'] = df['merchant'].apply(sanitize_merchant_name)
 
         # Optional fields
         if 'purchase_amount' in df.columns:
