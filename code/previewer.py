@@ -1,10 +1,9 @@
-# ===== code/previewer.py =====
 import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
 
-def format_prompt(text):
+def format_prompt(text: str) -> str:
     return text
 
 class Previewer:

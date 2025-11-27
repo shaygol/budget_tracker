@@ -19,22 +19,22 @@ class TestSecurity:
             'amount': [100, 200, 300]
         }
         df = pd.DataFrame(data)
-        
+
         # Normalize
         normalizer = Normalizer()
         normalized_df = normalizer.normalize(df)
-        
+
         # Verify sanitization
         merchants = normalized_df['merchant'].tolist()
-        
+
         # 1. Formula should be quoted
         assert merchants[0] == "'=SUM(A1:A100)"
         assert merchants[0].startswith("'")
-        
+
         # 2. Command injection should be quoted
         assert merchants[1] == "'+cmd| /c calc.exe"
         assert merchants[1].startswith("'")
-        
+
         # 3. Normal merchant should be untouched
         assert merchants[2] == "Normal Merchant"
 
@@ -42,7 +42,7 @@ class TestSecurity:
         """Test handling of extremely long strings."""
         long_string = "A" * 10000
         sanitized = sanitize_merchant_name(long_string)
-        
+
         # Should be truncated to MAX_MERCHANT_NAME_LENGTH (200)
         assert len(sanitized) == 200
         assert sanitized == "A" * 200
@@ -55,10 +55,10 @@ class TestSecurity:
             'amount': [100]
         }
         df = pd.DataFrame(data)
-        
+
         normalizer = Normalizer()
         normalized_df = normalizer.normalize(df)
-        
+
         # Should preserve legitimate special chars but be safe
         result = normalized_df['merchant'].iloc[0]
         assert result == 'Merchant & Sons < > " \''

@@ -1,4 +1,3 @@
-# ===== code/normalizer.py =====
 import pandas as pd
 import re
 import unicodedata
@@ -86,7 +85,25 @@ class Normalizer:
         missing = self.MANDATORY_FIELDS - set(df.columns)
         if missing:
             logger.error(f"Missing required columns: {missing}")
-            raise KeyError(f"Missing columns: {missing}")
+
+            # Build helpful error message
+            missing_list = ', '.join(missing)
+            expected_names = {
+                'transaction_date': 'תאריך / תאריך עסקה',
+                'merchant': 'שם בית העסק / שם בית עסק',
+                'amount': 'סכום / סכום חיוב בש"ח'
+            }
+
+            suggestions = '\n'.join([f"  - {field}: Expected column names like '{expected_names.get(field, field)}'"
+                                    for field in missing])
+
+            raise ValueError(
+                f"Missing Required Columns in Excel File\\n"
+                f"\\nThe following required columns were not found: {missing_list}\\n"
+                f"\\nExpected column names:\\n{suggestions}\\n"
+                f"\\nPlease ensure your Excel file has the correct column headers.\\n"
+                f"Available columns in file: {', '.join(df.columns)}"
+            )
 
         # 4. Drop rows missing any mandatory field
         df = df.dropna(subset=list(self.MANDATORY_FIELDS))
@@ -99,7 +116,7 @@ class Normalizer:
         df = df.dropna(subset=['amount'])
 
         df['merchant'] = self._parse_str(df['merchant'])
-        
+
         # Sanitize merchant names to prevent formula injection
         from code.validators import sanitize_merchant_name
         df['merchant'] = df['merchant'].apply(sanitize_merchant_name)

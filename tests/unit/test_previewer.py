@@ -10,9 +10,9 @@ from code.previewer import Previewer
 def test_previewer_creates_summary(sample_normalized_df):
     """Test that previewer creates a summary grouped by year/month/category."""
     previewer = Previewer()
-    
+
     summary = previewer.preview(sample_normalized_df, confirm=False)
-    
+
     assert 'year' in summary.columns
     assert 'month' in summary.columns
     assert 'category' in summary.columns
@@ -23,9 +23,9 @@ def test_previewer_creates_summary(sample_normalized_df):
 def test_previewer_sums_amounts(sample_normalized_df):
     """Test that previewer correctly sums amounts."""
     previewer = Previewer()
-    
+
     summary = previewer.preview(sample_normalized_df, confirm=False)
-    
+
     # Should sum the two Amazon entries (150 + 200 = 350)
     shopping_total = summary[summary['category'] == 'Shopping']['monthly_amount'].sum()
     assert shopping_total == 350.0
@@ -41,10 +41,10 @@ def test_previewer_no_confirm_mode():
         'subcat': ['Online'],
         'monthly_amount': [100.0]
     })
-    
+
     # Should not block
     summary = previewer.preview(df, confirm=False)
-    
+
     assert len(summary) == 1
     assert summary['monthly_amount'].sum() == 100.0
 
@@ -59,9 +59,9 @@ def test_previewer_groups_by_all_dimensions():
         'subcat': ['Groceries', 'Groceries', 'Online', 'Online'],
         'monthly_amount': [50.0, 50.0, 100.0, 100.0]
     })
-    
+
     summary = previewer.preview(df, confirm=False)
-    
+
     # Should have 2 rows (Jan Food + Feb Shopping)
     assert len(summary) == 2
     assert summary['monthly_amount'].tolist() == [100.0, 200.0]

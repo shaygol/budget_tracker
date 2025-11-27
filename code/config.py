@@ -1,17 +1,27 @@
-# ===== code/config.py =====
 from pathlib import Path
 import logging
 
-OUTPUT_DIR = Path('output')
-TRANSACTIONS_DIR = Path('transactions')
-CATEGORIES_FILE_PATH = Path('categories.json')
-DASHBOARD_FILE_PATH = Path('dashboard.xlsx')
+# Base directory is the parent of the 'code' directory (root of repo)
+BASE_DIR = Path(__file__).parent.parent.resolve()
+
+# User Files Directory
+USER_FILES_DIR = BASE_DIR / 'UserFiles'
+
+# Subdirectories
+OUTPUT_DIR = BASE_DIR / 'output'
+TRANSACTIONS_DIR = USER_FILES_DIR / 'temp_processing'
+BACKUPS_ROOT = USER_FILES_DIR / 'backups'
+ARCHIVE_DIR = BACKUPS_ROOT / 'archive'
+DASHBOARD_BACKUP_DIR = BACKUPS_ROOT / 'dashboard'
+
+# Files
+CATEGORIES_FILE_PATH = USER_FILES_DIR / 'categories.json'
+DASHBOARD_FILE_PATH = USER_FILES_DIR / 'dashboard.xlsx'
 
 LOG_FILE_NAME = 'budget.log'
 TEMPLATE_SHEET_NAME = "Template"
 
 SUPPORTED_EXTENSIONS = ['.xlsx', '.xls']
-ARCHIVE_DIR = 'archive'
 
 LOG_SEVERITY = logging.DEBUG
 

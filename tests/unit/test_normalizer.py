@@ -15,9 +15,9 @@ def test_normalizer_adds_year_month():
         'merchant': ['Amazon', 'Store'],
         'amount': [100.0, 200.0]
     })
-    
+
     result = normalizer.normalize(df)
-    
+
     assert 'year' in result.columns
     assert 'month' in result.columns
     assert result['year'].tolist() == [2024, 2024]
@@ -32,9 +32,9 @@ def test_normalizer_preserves_data():
         'merchant': ['Amazon'],
         'amount': [100.0]
     })
-    
+
     result = normalizer.normalize(df)
-    
+
     assert result['merchant'].tolist() == ['Amazon']
     assert result['monthly_amount'].tolist() == [100.0]
 
@@ -43,9 +43,9 @@ def test_normalizer_handles_empty_dataframe():
     """Test that normalizer handles empty DataFrames."""
     normalizer = Normalizer()
     df = pd.DataFrame(columns=['transaction_date', 'merchant', 'amount'])
-    
+
     result = normalizer.normalize(df)
-    
+
     assert 'year' in result.columns
     assert 'month' in result.columns
     assert len(result) == 0
@@ -59,9 +59,9 @@ def test_normalizer_sorts_by_date():
         'merchant': ['B', 'A', 'C'],
         'amount': [200.0, 100.0, 300.0]
     })
-    
+
     result = normalizer.normalize(df)
-    
+
     # Data should be in date order (not explicitly sorted in normalizer, but test structure)
     assert len(result) == 3
     assert 'year' in result.columns

@@ -40,9 +40,9 @@ def main():
     """Main entry point with CLI argument parsing."""
     parser = argparse.ArgumentParser(description='Budget Tracker - Process and categorize financial transactions')
     parser.add_argument('--gui', action='store_true', help='Launch GUI mode')
-    
+
     args = parser.parse_args()
-    
+
     if args.gui:
         # Launch GUI
         from gui_app import main as gui_main

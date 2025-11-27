@@ -1,4 +1,3 @@
-# ===== code/file_manager.py =====
 import os
 from pathlib import Path
 from zipfile import BadZipFile
@@ -32,7 +31,14 @@ def _load_transaction_file(file_path: Path) -> Optional[pd.DataFrame]:
         raw = pd.read_excel(file_path, header=None, engine='openpyxl')
         header_idx = _detect_header_row(raw)
         if header_idx is None:
-            raise ValueError("Could not detect header row with keywords in file.")
+            raise ValueError(
+                f"Invalid Transaction File: Could not find the header row in '{file_path.name}'.\\n"
+                f"\\nThe file must contain column headers with at least:\\n"
+                f"  - תאריך (Date)\\n"
+                f"  - שם בית העסק (Merchant)\\n"
+                f"  - סכום (Amount)\\n"
+                f"\\nPlease verify this is a valid credit card transaction export file."
+            )
         df = pd.read_excel(file_path, header=header_idx, engine='openpyxl')
         df['source_file'] = file_path.name
         logger.info(f"Loaded file: {file_path.name} (rows: {len(df)}, header row at: {header_idx})")
@@ -42,7 +48,7 @@ def _load_transaction_file(file_path: Path) -> Optional[pd.DataFrame]:
         return None
 
 
-def load_transaction_files(transactions_dir: str) -> List[pd.DataFrame]:
+def load_transaction_files(transactions_dir: str | Path) -> List[pd.DataFrame]:
     """
     Load all Excel files from the transactions directory that have a recognizable header row.
     """
@@ -71,14 +77,14 @@ def is_valid_excel_file(path: str) -> bool:
     except (BadZipFile, OSError, ValueError):
         logger.debug('Failed to open workbook')
         return False
-    
-def ensure_dirs(dirs):
+
+def ensure_dirs(dirs: List[Path | str]) -> None:
     for d in dirs:
         os.makedirs(d, exist_ok=True)
 
-def archive_files(file_name = None):
+def archive_files(file_name: Optional[str] = None) -> None:
     logger.debug(f"Archived file '{file_name}'")
-    archive_dir_path = TRANSACTIONS_DIR / ARCHIVE_DIR
+    archive_dir_path = ARCHIVE_DIR
     ensure_dirs([archive_dir_path])
     file_list = [file_name] if file_name else os.listdir(TRANSACTIONS_DIR)
 

@@ -1,8 +1,9 @@
 import json
 import sys
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import pandas as pd
+from pathlib import Path
 from openpyxl import load_workbook
 from code.previewer import format_prompt
 from code.config import TEMPLATE_SHEET_NAME
@@ -11,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 class CategoryManager:
-    def __init__(self, categories_path: str, dashboard_path: str):
+    def __init__(self, categories_path: str | Path, dashboard_path: str | Path) -> None:
         self.categories_path = categories_path
         self.dashboard_path = dashboard_path
 
         self.category_map = self._load_category_map()
         self.valid_categories = self.load_category_structure_from_template()
 
-    def _load_category_map(self) -> dict:
+    def _load_category_map(self) -> Dict[str, List[str]]:
         try:
             with open(self.categories_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -26,47 +27,60 @@ class CategoryManager:
             logger.warning(f"Categories file not found or invalid: {self.categories_path}. Starting with empty map.")
             return {}
 
-    def load_category_structure_from_template(self) -> dict:
+    def load_category_structure_from_template(self) -> Dict[str, List[str]]:
         """
         Loads the category structure from the 'Template' sheet in the given Excel dashboard.
         Skips header rows and supports merged cells in the first column for categories.
         """
         wb = load_workbook(self.dashboard_path, data_only=True)
         try:
-            ws = wb[TEMPLATE_SHEET_NAME]
-        except KeyError:
-            logger.error("The worksheet 'Template' does not exist in the dashboard file.")
-            raise ValueError("Missing 'Template' worksheet in the dashboard. Please ensure it exists and is named correctly.")
+            try:
+                ws = wb[TEMPLATE_SHEET_NAME]
+            except KeyError:
+                logger.error("The worksheet 'Template' does not exist in the dashboard file.")
+                available_sheets = ', '.join(wb.sheetnames) if wb.sheetnames else 'None'
+                raise ValueError(
+                    f"Missing 'Template' Worksheet\\n"
+                    f"\\nThe dashboard file '{self.dashboard_path}' must contain a sheet named '{TEMPLATE_SHEET_NAME}'.\\n"
+                    f"\\nAvailable sheets in the file: {available_sheets}\\n"
+                    f"\\nTo fix this issue:\\n"
+                    f"  1. Open the dashboard file in Excel\\n"
+                    f"  2. Create or rename a sheet to '{TEMPLATE_SHEET_NAME}'\\n"
+                    f"  3. Ensure it contains your category structure (Category | Subcategory columns)\\n"
+                    f"  4. Save the file and try again"
+                )
 
-        categories = {}
-        current_category = None
+            categories = {}
+            current_category = None
 
-        for row in ws.iter_rows(min_row=2, max_col=2):  # skip row 1 (headers)
-            cat_cell, subcat_cell = row
-            cat_val = cat_cell.value
-            subcat_val = subcat_cell.value
+            for row in ws.iter_rows(min_row=2, max_col=2):  # skip row 1 (headers)
+                cat_cell, subcat_cell = row
+                cat_val = cat_cell.value
+                subcat_val = subcat_cell.value
 
-            # Skip rows that look like headers
-            if str(cat_val).strip() in ["נושא", "נושא הוצאה"] or str(subcat_val).strip() in ["פירוט", "פירוט הוצאות"]:
-                continue
+                # Skip rows that look like headers
+                if str(cat_val).strip() in ["נושא", "נושא הוצאה"] or str(subcat_val).strip() in ["פירוט", "פירוט הוצאות"]:
+                    continue
 
-            # Detect new category
-            if cat_val and str(cat_val).strip():
-                current_category = str(cat_val).strip()
-                if current_category not in categories:
-                    categories[current_category] = []
+                # Detect new category
+                if cat_val and str(cat_val).strip():
+                    current_category = str(cat_val).strip()
+                    if current_category not in categories:
+                        categories[current_category] = []
 
-            # Add subcategory
-            if subcat_val and current_category:
-                subcategory = str(subcat_val).strip()
-                categories[current_category].append(subcategory)
+                # Add subcategory
+                if subcat_val and current_category:
+                    subcategory = str(subcat_val).strip()
+                    categories[current_category].append(subcategory)
 
-        logger.info("=== Current category structure from Template ===")
-        for category, subcategories in categories.items():
-            logger.info(f"{category}: {subcategories}")
-        logger.info("===============================================")
+            logger.info("=== Current category structure from Template ===")
+            for category, subcategories in categories.items():
+                logger.info(f"{category}: {subcategories}")
+            logger.info("===============================================")
 
-        return categories
+            return categories
+        finally:
+            wb.close()
 
 
 
@@ -175,6 +189,6 @@ class CategoryManager:
 
         return df
 
-    def save_categories(self):
+    def save_categories(self) -> None:
         with open(self.categories_path, 'w', encoding='utf-8') as f:
             json.dump(self.category_map, f, ensure_ascii=False, indent=2)

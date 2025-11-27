@@ -1,4 +1,3 @@
-# ===== code/logger.py =====
 import logging
 import os
 from code.config import LOG_SEVERITY

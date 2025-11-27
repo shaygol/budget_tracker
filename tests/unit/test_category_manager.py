@@ -26,12 +26,12 @@ def test_category_manager_loads_categories(temp_dir):
     }
     with open(categories_file, 'w', encoding='utf-8') as f:
         json.dump(categories, f)
-    
+
     dashboard_file = temp_dir / 'dashboard.xlsx'
     create_dashboard_with_template(dashboard_file)
-    
+
     manager = CategoryManager(categories_file, dashboard_file)
-    
+
     assert manager.category_map == categories
 
 
@@ -39,18 +39,18 @@ def test_category_manager_saves_categories(temp_dir):
     """Test that CategoryManager saves new categories."""
     categories_file = temp_dir / 'categories.json'
     categories_file.write_text('{}', encoding='utf-8')
-    
+
     dashboard_file = temp_dir / 'dashboard.xlsx'
     create_dashboard_with_template(dashboard_file)
-    
+
     manager = CategoryManager(categories_file, dashboard_file)
     manager.category_map['NewMerchant'] = ['Category', 'Subcategory']
     manager.save_categories()
-    
+
     # Read back
     with open(categories_file, 'r', encoding='utf-8') as f:
         saved = json.load(f)
-    
+
     assert 'NewMerchant' in saved
     assert saved['NewMerchant'] == ['Category', 'Subcategory']
 
@@ -60,18 +60,18 @@ def test_category_manager_maps_known_merchants(temp_dir, sample_categories):
     categories_file = temp_dir / 'categories.json'
     with open(categories_file, 'w', encoding='utf-8') as f:
         json.dump(sample_categories, f)
-    
+
     dashboard_file = temp_dir / 'dashboard.xlsx'
     create_dashboard_with_template(dashboard_file)
-    
+
     df = pd.DataFrame({
         'merchant': ['Amazon', 'Supermarket'],
         'amount': [100.0, 50.0]
     })
-    
+
     manager = CategoryManager(categories_file, dashboard_file)
     df['category'] = df['merchant'].map(lambda m: manager.category_map.get(m, [None, None])[0])
     df['subcat'] = df['merchant'].map(lambda m: manager.category_map.get(m, [None, None])[1])
-    
+
     assert df['category'].tolist() == ['Shopping', 'Food']
     assert df['subcat'].tolist() == ['Online', 'Groceries']
