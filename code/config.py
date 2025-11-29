@@ -1,8 +1,14 @@
 from pathlib import Path
 import logging
+import sys
 
 # Base directory is the parent of the 'code' directory (root of repo)
-BASE_DIR = Path(__file__).parent.parent.resolve()
+if getattr(sys, 'frozen', False):
+    # If running as compiled exe, use the executable's directory
+    BASE_DIR = Path(sys.executable).parent.resolve()
+else:
+    # If running as script, use the standard path
+    BASE_DIR = Path(__file__).parent.parent.resolve()
 
 # User Files Directory
 USER_FILES_DIR = BASE_DIR / 'UserFiles'

@@ -37,19 +37,19 @@ def main_cli():
         print("\n[INFO] Operation cancelled by user.")
 
 def main():
-    """Main entry point with CLI argument parsing."""
+    """Main entry point - launches GUI by default."""
     parser = argparse.ArgumentParser(description='Budget Tracker - Process and categorize financial transactions')
-    parser.add_argument('--gui', action='store_true', help='Launch GUI mode')
+    parser.add_argument('--cli', action='store_true', help='Run in CLI mode instead of GUI')
 
     args = parser.parse_args()
 
-    if args.gui:
-        # Launch GUI
-        from gui_app import main as gui_main
-        gui_main()
-    else:
+    if args.cli:
         # Run CLI mode
         main_cli()
+    else:
+        # Launch GUI (default)
+        from gui_app import main as gui_main
+        gui_main()
 
 if __name__ == '__main__':
     main()

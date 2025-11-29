@@ -524,7 +524,7 @@ class BudgetTrackerGUI(QMainWindow):
         import_btn.clicked.connect(self.import_files)
         file_buttons.addWidget(import_btn)
 
-        refresh_all_btn = QPushButton(f"⟳ {self.translations.get('refresh_all')}")
+        refresh_all_btn = QPushButton(self.translations.get('refresh_all'))
         refresh_all_btn.setFont(QFont('Arial', 10, QFont.Weight.Bold))
         refresh_all_btn.clicked.connect(self.refresh_all)
         file_buttons.addWidget(refresh_all_btn)
@@ -568,12 +568,6 @@ class BudgetTrackerGUI(QMainWindow):
 
         self.archive_info_label = QLabel()
         archive_layout.addWidget(self.archive_info_label)
-
-        # Add refresh all button
-        refresh_all_btn = QPushButton("⟳ Refresh All")
-        refresh_all_btn.setFont(QFont('Arial', 10, QFont.Weight.Bold))
-        refresh_all_btn.clicked.connect(self.refresh_all)
-        archive_layout.addWidget(refresh_all_btn)
 
         clear_archive_btn = QPushButton(self.translations.get('clear_archive'))
         clear_archive_btn.clicked.connect(self.clear_archive)
