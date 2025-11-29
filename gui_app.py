@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
     QDialog, QComboBox, QDialogButtonBox, QTextEdit, QHeaderView
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent
+from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -348,7 +348,7 @@ class ChartWidget(QWidget):
             values = monthly_data.values
 
             # Get labels in current language
-            title = self.translations.get('preview')
+            title = self.translations.get('year_overview')
             xlabel = self.translations.get('month')
             ylabel = self.translations.get('amount')
 
@@ -488,6 +488,9 @@ class BudgetTrackerGUI(QMainWindow):
 
         # Header with language toggle
         header_layout = QHBoxLayout()
+
+        header_layout.addStretch() # Push title to center
+
         title_label = QLabel(self.translations.get('app_title'))
         title_label.setFont(QFont('Arial', 16, QFont.Weight.Bold))
         header_layout.addWidget(title_label)
@@ -521,14 +524,14 @@ class BudgetTrackerGUI(QMainWindow):
         import_btn.clicked.connect(self.import_files)
         file_buttons.addWidget(import_btn)
 
-        refresh_btn = QPushButton(self.translations.get('refresh'))
-        refresh_btn.clicked.connect(self.refresh_files)
-        file_buttons.addWidget(refresh_btn)
+        refresh_all_btn = QPushButton(f"⟳ {self.translations.get('refresh_all')}")
+        refresh_all_btn.setFont(QFont('Arial', 10, QFont.Weight.Bold))
+        refresh_all_btn.clicked.connect(self.refresh_all)
+        file_buttons.addWidget(refresh_all_btn)
 
         file_layout.addLayout(file_buttons)
         main_layout.addWidget(file_group)
 
-        # Process button
         self.process_btn = QPushButton(self.translations.get('process_transactions'))
         self.process_btn.setFont(QFont('Arial', 14, QFont.Weight.Bold))
         self.process_btn.setMinimumHeight(50)
@@ -543,13 +546,13 @@ class BudgetTrackerGUI(QMainWindow):
         # Preview tabs
         self.preview_tabs = QTabWidget()
 
-        # Table tab
-        self.preview_table = QTableWidget()
-        self.preview_tabs.addTab(self.preview_table, self.translations.get('table_tab'))
-
         # Chart tab
         self.chart_widget = ChartWidget(self.translations)
         self.preview_tabs.addTab(self.chart_widget, self.translations.get('chart_tab'))
+
+        # Table tab
+        self.preview_table = QTableWidget()
+        self.preview_tabs.addTab(self.preview_table, self.translations.get('table_tab'))
 
         # Logs tab
         self.log_viewer = LogViewerWidget()
@@ -566,11 +569,11 @@ class BudgetTrackerGUI(QMainWindow):
         self.archive_info_label = QLabel()
         archive_layout.addWidget(self.archive_info_label)
 
-        # Add refresh button for dashboard data
-        refresh_dashboard_btn = QPushButton("⟳ Reload Dashboard Data")
-        refresh_dashboard_btn.clicked.connect(self.load_dashboard_data)
-        archive_layout.addWidget(refresh_dashboard_btn)
-        archive_layout.addWidget(self.archive_info_label)
+        # Add refresh all button
+        refresh_all_btn = QPushButton("⟳ Refresh All")
+        refresh_all_btn.setFont(QFont('Arial', 10, QFont.Weight.Bold))
+        refresh_all_btn.clicked.connect(self.refresh_all)
+        archive_layout.addWidget(refresh_all_btn)
 
         clear_archive_btn = QPushButton(self.translations.get('clear_archive'))
         clear_archive_btn.clicked.connect(self.clear_archive)
@@ -580,8 +583,8 @@ class BudgetTrackerGUI(QMainWindow):
 
         main_layout.addWidget(self.preview_tabs)
 
-        # Set Chart tab as default
-        self.preview_tabs.setCurrentIndex(1)
+        # Set Table tab as default
+        self.preview_tabs.setCurrentIndex(0)
 
         # Action buttons
         action_layout = QHBoxLayout()
@@ -607,7 +610,50 @@ class BudgetTrackerGUI(QMainWindow):
         # Load existing dashboard data
         self.load_dashboard_data()
 
+        # Perform startup validation (non-blocking)
+        QTimer.singleShot(500, self.perform_startup_validation)
+
+    def perform_startup_validation(self):
+        """Perform template validation on startup and show warnings if needed."""
+        try:
+            from code.category_manager import CategoryManager
+
+            # Run validation
+            manager = CategoryManager(CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, strict_validation=False)
+            validation = manager.validate_template_structure()
+
+            # Only show message if there are errors or warnings
+            if validation.errors or validation.warnings:
+                msg_parts = []
+
+                if validation.errors:
+                    msg_parts.append(f"Found {len(validation.errors)} error(s) in template:")
+                    for i, error in enumerate(validation.errors[:3], 1):  # Show first 3
+                        msg_parts.append(f"  {i}. {error}")
+                    if len(validation.errors) > 3:
+                        msg_parts.append(f"  ... and {len(validation.errors) - 3} more")
+
+                if validation.warnings:
+                    msg_parts.append(f"Found {len(validation.warnings)} warning(s):")
+                    for i, warning in enumerate(validation.warnings[:3], 1):
+                        msg_parts.append(f"  {i}. {warning}")
+                    if len(validation.warnings) > 3:
+                        msg_parts.append(f"  ... and {len(validation.warnings) - 3} more")
+
+                # Show appropriate dialog
+                if validation.errors:
+                    QMessageBox.warning(
+                        self,
+                        "Template Validation Issues",
+                        "\n".join(msg_parts)
+                    )
+
+        except Exception as e:
+            # Don't block startup for validation errors, just log them
+            self.log_viewer.add_log('ERROR', f'Failed to validate template on startup: {str(e)}')
+
     def import_dropped_files(self, files: List[str]):
+        """Import files dropped via drag and drop."""
         from code.validators import validate_excel_file, ValidationError
         count, errors = 0, []
 
@@ -631,16 +677,20 @@ class BudgetTrackerGUI(QMainWindow):
 
     def load_dashboard_data(self):
         """Load existing data from dashboard Excel file."""
+        print(f"DEBUG: Loading dashboard data from {DASHBOARD_FILE_PATH}")
         try:
             if not DASHBOARD_FILE_PATH.exists():
+                print("DEBUG: Dashboard file does not exist")
                 self.log_viewer.add_log('INFO', 'No existing dashboard found')
                 return
 
             self.log_viewer.add_log('INFO', 'Loading existing dashboard data...')
+            print("DEBUG: File exists, loading...")
 
             # Read all sheets except template
             import openpyxl
             wb = openpyxl.load_workbook(DASHBOARD_FILE_PATH, data_only=True)
+            print(f"DEBUG: Workbook loaded. Sheets: {wb.sheetnames}")
             try:
                 all_data = []
                 for sheet_name in wb.sheetnames:
@@ -656,20 +706,35 @@ class BudgetTrackerGUI(QMainWindow):
                         continue
 
                     # Read data from sheet
-                    # Expected format: Category | Subcategory | Jan | Feb | ... | Dec
-                    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-                        if not row or len(row) < 14:
+                    row_count = 0
+
+                    # Track last category/subcategory for merged cells
+                    last_category = None
+                    last_subcat = None
+
+                    # Iterate through rows starting from row 2
+                    for row_idx in range(2, ws.max_row + 1):
+                        # Read category and subcategory
+                        category_val = ws.cell(row=row_idx, column=1).value
+                        subcat_val = ws.cell(row=row_idx, column=2).value
+
+                        # Use last value if current is None (for merged cells)
+                        if category_val:
+                            last_category = category_val
+                        if subcat_val:
+                            last_subcat = subcat_val
+
+                        category = last_category
+                        subcat = last_subcat
+
+                        # Skip summary rows to avoid double-counting
+                        if not category or not subcat or 'סיכום' in str(category):
                             continue
 
-                        category = row[0]
-                        subcat = row[1]
-
-                        if not category or not subcat:
-                            continue
-
-                        # Months are in columns 2-13 (index 2-13)
+                        # Read each month (columns 3-14 = C-N = Jan-Dec)
                         for month in range(1, 13):
-                            amount = row[month + 1]  # +1 because months start at column 2 (index 2)
+                            col_idx = month + 2  # month 1 = column 3 (C), month 12 = column 14 (N)
+                            amount = ws.cell(row=row_idx, column=col_idx).value
 
                             if amount and isinstance(amount, (int, float)) and amount != 0:
                                 all_data.append({
@@ -679,17 +744,37 @@ class BudgetTrackerGUI(QMainWindow):
                                     'subcat': str(subcat),
                                     'monthly_amount': float(amount)
                                 })
+                                row_count += 1
             finally:
                 wb.close()
 
+            total_amount = sum(d['monthly_amount'] for d in all_data)
+            print(f"DEBUG: Total records found: {len(all_data)}")
+            print(f"DEBUG: Total amount loaded: {total_amount:,.2f}")
             if all_data:
                 summary_df = pd.DataFrame(all_data)
-                self.log_viewer.add_log('INFO', f'Loaded {len(summary_df)} records from dashboard')
 
-                # Update displays
-                self.update_preview_table(summary_df)
-                self.chart_widget.update_chart(summary_df)
-                self.log_viewer.add_log('INFO', 'Dashboard data loaded successfully')
+                # Filter to current year only
+                import datetime
+                current_year = datetime.datetime.now().year
+                summary_df = summary_df[summary_df['year'] == current_year]
+
+                if not summary_df.empty:
+                    self.log_viewer.add_log('INFO', f'Loaded {len(summary_df)} records from dashboard ({current_year})')
+
+                    # Update displays
+                    self.update_preview_table(summary_df)
+                    self.chart_widget.update_chart(summary_df)
+
+                    # Update chart tab title
+                    years = sorted(summary_df['year'].unique())
+                    year_str = ", ".join(map(str, years))
+                    self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.chart_widget),
+                                                 f"{self.translations.get('chart_tab')} ({year_str})")
+
+                    self.log_viewer.add_log('INFO', 'Dashboard data loaded successfully')
+                else:
+                    self.log_viewer.add_log('INFO', f'No data found for current year ({current_year})')
             else:
                 self.log_viewer.add_log('INFO', 'No data found in dashboard')
 
@@ -741,6 +826,14 @@ class BudgetTrackerGUI(QMainWindow):
         self.archive_info_label.setText(
             self.translations.get('archive_count', count=len(files))
         )
+
+    def refresh_all(self):
+        """Refresh everything: files, archive, and dashboard data."""
+        self.refresh_files()
+        self.refresh_archive()
+        self.load_dashboard_data()
+        self.log_viewer.add_log('INFO', 'Refreshed all data')
+        self.statusBar().showMessage("All data refreshed")
 
     def import_files(self):
         """Import Excel files via file dialog."""
@@ -838,6 +931,13 @@ class BudgetTrackerGUI(QMainWindow):
             # Update chart
             try:
                 self.chart_widget.update_chart(summary_df)
+
+                # Update chart tab title
+                years = sorted(summary_df['year'].unique())
+                year_str = ", ".join(map(str, years))
+                self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.chart_widget),
+                                             f"{self.translations.get('chart_tab')} ({year_str})")
+
                 self.log_viewer.add_log('INFO', 'Chart updated successfully')
             except Exception as e:
                 self.log_viewer.add_log('WARNING', f'Failed to update chart: {str(e)}')
@@ -870,62 +970,104 @@ class BudgetTrackerGUI(QMainWindow):
         )
 
     def update_preview_table(self, summary_df: pd.DataFrame):
-        """Update the preview table with summary data."""
-        # Sort by Category -> Subcategory -> Year -> Month for better grouping
-        if not summary_df.empty:
-            summary_df = summary_df.sort_values(['category', 'subcat', 'year', 'month'])
+        """Update the preview table with category summary only."""
+        if summary_df.empty:
+            self.preview_table.setRowCount(0)
+            return
 
-        self.preview_table.setRowCount(len(summary_df) + 1)  # +1 for total row
-        self.preview_table.setColumnCount(5)
+        # Update tab title with year
+        years = sorted(summary_df['year'].unique())
+        year_str = ", ".join(map(str, years))
+        self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.preview_table),
+                                     f"{self.translations.get('table_tab')} ({year_str})")
+
+        # Group by Category and sum amounts
+        category_summary = summary_df.groupby('category')['monthly_amount'].sum().reset_index()
+
+        # Calculate grand total
+        grand_total = category_summary['monthly_amount'].sum()
+
+        # Calculate percentage for sorting
+        category_summary['pct'] = (category_summary['monthly_amount'] / grand_total * 100) if grand_total > 0 else 0
+
+        # Sort by percentage descending (highest first)
+        category_summary = category_summary.sort_values('pct', ascending=False)
+
+        print("DEBUG: Sorted Category Summary:")
+        print(category_summary[['category', 'monthly_amount', 'pct']].head())
+
+        # Set up table
+        self.preview_table.setSortingEnabled(False)  # Ensure manual order is respected
+        self.preview_table.setRowCount(len(category_summary) + 1)  # +1 for grand total
+        self.preview_table.setColumnCount(3)
         self.preview_table.setAlternatingRowColors(True)
 
         headers = [
-            self.translations.get('year'),
-            self.translations.get('month'),
             self.translations.get('category'),
-            self.translations.get('subcategory'),
-            self.translations.get('amount')
+            self.translations.get('amount'),
+            '%'  # Percentage of total
         ]
         self.preview_table.setHorizontalHeaderLabels(headers)
 
-        total_amount = 0
-        current_cat = None
+        # Category colors (cycling through pleasant colors)
+        category_colors = [
+            QColor(230, 240, 255),  # Light blue
+            QColor(255, 240, 230),  # Light orange
+            QColor(240, 255, 240),  # Light green
+            QColor(255, 245, 230),  # Light yellow
+            QColor(245, 230, 255),  # Light purple
+            QColor(230, 255, 255),  # Light cyan
+        ]
 
-        for i, row in summary_df.iterrows():
-            # Year
-            self.preview_table.setItem(i, 0, QTableWidgetItem(str(int(row['year']))))
+        for row_idx, (index, row) in enumerate(category_summary.iterrows()):
+            cat_color = category_colors[row_idx % len(category_colors)]
 
-            # Month
-            self.preview_table.setItem(i, 1, QTableWidgetItem(self.translations.get(f"month_{int(row['month'])}")))
-
-            # Category (Bold if changed)
+            # Category
             cat_item = QTableWidgetItem(str(row['category']))
-            if row['category'] != current_cat:
-                cat_item.setFont(QFont('Arial', 9, QFont.Weight.Bold))
-                current_cat = row['category']
-            self.preview_table.setItem(i, 2, cat_item)
-
-            # Subcategory
-            self.preview_table.setItem(i, 3, QTableWidgetItem(str(row['subcat'])))
+            cat_item.setFont(QFont('Arial', 10))
+            cat_item.setBackground(cat_color)
+            self.preview_table.setItem(row_idx, 0, cat_item)
 
             # Amount
-            self.preview_table.setItem(i, 4, QTableWidgetItem(f"₪{row['monthly_amount']:,.2f}"))
-            total_amount += row['monthly_amount']
+            amount_item = QTableWidgetItem(f"₪{row['monthly_amount']:,.2f}")
+            amount_item.setFont(QFont('Arial', 10))
+            amount_item.setBackground(cat_color)
+            self.preview_table.setItem(row_idx, 1, amount_item)
 
-        # Add total row
-        total_row = len(summary_df)
-        total_label = QTableWidgetItem("TOTAL" if self.translations.language == 'en' else "סה\"כ")
-        total_label.setFont(QFont('Arial', 10, QFont.Weight.Bold))
-        self.preview_table.setItem(total_row, 3, total_label)
+            # Percentage
+            pct = (row['monthly_amount'] / grand_total * 100) if grand_total > 0 else 0
+            pct_item = QTableWidgetItem(f"{pct:.1f}%")
+            pct_item.setFont(QFont('Arial', 10))
+            pct_item.setBackground(cat_color)
+            self.preview_table.setItem(row_idx, 2, pct_item)
 
-        total_value = QTableWidgetItem(f"₪{total_amount:,.2f}")
-        total_value.setFont(QFont('Arial', 10, QFont.Weight.Bold))
-        self.preview_table.setItem(total_row, 4, total_value)
+        # Add grand total row
+        total_row = len(category_summary)
 
-        self.preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        total_label = QTableWidgetItem("TOTAL" if self.translations.language == 'en' else "סה\"כ כולל")
+        total_label.setFont(QFont('Arial', 11, QFont.Weight.Bold))
+        total_label.setBackground(QColor(180, 180, 180))
+        self.preview_table.setItem(total_row, 0, total_label)
 
-        # Show total in status bar
-        self.statusBar().showMessage(f"Total: ₪{total_amount:,.2f} | {len(summary_df)} records")
+        total_value = QTableWidgetItem(f"₪{grand_total:,.2f}")
+        total_value.setFont(QFont('Arial', 11, QFont.Weight.Bold))
+        total_value.setBackground(QColor(180, 180, 180))
+        self.preview_table.setItem(total_row, 1, total_value)
+
+        total_pct = QTableWidgetItem("100.0%")
+        total_pct.setFont(QFont('Arial', 11, QFont.Weight.Bold))
+        total_pct.setBackground(QColor(180, 180, 180))
+        self.preview_table.setItem(total_row, 2, total_pct)
+
+        # Adjust column widths
+        self.preview_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Category
+        self.preview_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Amount
+        self.preview_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # %
+
+        # Show summary in status bar
+        self.statusBar().showMessage(
+            f"Total: ₪{grand_total:,.2f} | {len(category_summary)} categories"
+        )
 
     def clear_archive(self):
         """Clear all archived files."""

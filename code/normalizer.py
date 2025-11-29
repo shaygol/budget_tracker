@@ -106,14 +106,26 @@ class Normalizer:
             )
 
         # 4. Drop rows missing any mandatory field
+        before_drop = len(df)
         df = df.dropna(subset=list(self.MANDATORY_FIELDS))
+        dropped = before_drop - len(df)
+        if dropped > 0:
+            logger.warning(f"Dropped {dropped} rows missing mandatory fields")
 
         # 5. Field-specific parsing
         df['transaction_date'] = self._parse_date(df['transaction_date'])
+        before_date_drop = len(df)
         df = df.dropna(subset=['transaction_date'])
+        dropped_date = before_date_drop - len(df)
+        if dropped_date > 0:
+            logger.warning(f"Dropped {dropped_date} rows with invalid dates")
 
         df['amount'] = self._parse_amount(df['amount'])
+        before_amount_drop = len(df)
         df = df.dropna(subset=['amount'])
+        dropped_amount = before_amount_drop - len(df)
+        if dropped_amount > 0:
+            logger.warning(f"Dropped {dropped_amount} rows with invalid amounts")
 
         df['merchant'] = self._parse_str(df['merchant'])
 

@@ -17,11 +17,11 @@ class TestSystemWorkflow:
         user_files = tmp_path / "UserFiles"
         user_files.mkdir()
 
-        temp_proc = user_files / "temp_processing"
-        temp_proc.mkdir()
-
+        # Create backups directory (which is now the transactions dir)
         backups = user_files / "backups"
         backups.mkdir()
+
+        temp_proc = backups  # Transactions are now processed from backups dir
 
         archive = backups / "archive"
         archive.mkdir()
