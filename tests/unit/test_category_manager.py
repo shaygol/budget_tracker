@@ -13,7 +13,21 @@ from code.category_manager import CategoryManager
 def create_dashboard_with_template(file_path):
     """Helper to create a dashboard with Template sheet."""
     wb = Workbook()
-    wb.active.title = "Template"
+    ws = wb.active
+    ws.title = "Template"
+
+    # Add headers
+    ws['A1'] = 'Category'
+    ws['B1'] = 'Subcategory'
+
+    # Add some sample data to make template valid
+    ws['A2'] = 'Shopping'
+    ws['B2'] = 'Online'
+    ws['A3'] = ''
+    ws['B3'] = 'Retail'
+    ws['A4'] = 'Food'
+    ws['B4'] = 'Groceries'
+
     wb.save(file_path)
 
 

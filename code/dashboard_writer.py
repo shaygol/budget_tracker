@@ -128,16 +128,21 @@ class DashboardWriter:
                         decision = self.user_decisions[month_key]
 
                     if decision == "override":
+                        logger.debug(f"Overriding cell {cell.coordinate} with {amount}")
                         cell.value = amount
                     elif decision == "add":
                         try:
-                            cell.value = float(existing_value) + amount
+                            new_val = float(existing_value) + amount
+                            logger.debug(f"Adding to cell {cell.coordinate}: {existing_value} + {amount} = {new_val}")
+                            cell.value = new_val
                         except Exception:
                             cell.value = amount
                     elif decision == "skip":
+                        logger.debug(f"Skipping cell {cell.coordinate}")
                         continue
                 else:
                     # No existing value, safe to write
+                    logger.debug(f"Writing to new cell {cell.coordinate}: {amount}")
                     cell.value = amount
 
                 cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -200,7 +205,15 @@ class DashboardWriter:
                              subcat_map: Dict[Tuple[str, str], int], cat_ranges: Dict[str, Tuple[int, int]]) -> None:
         # Inserts a subcategory row below the existing category group
         start, end = cat_ranges[category]
-        insert_at = end + 1
+
+        # Try to insert before the last row to preserve formulas (if range > 1 row)
+        # This helps Excel expand ranges like SUM(C5:C10) -> SUM(C5:C11)
+        if end > start:
+            insert_at = end
+        else:
+            insert_at = end + 1
+
+        logger.debug(f"Inserting new subcategory '{subcat}' at row {insert_at} (Category range: {start}-{end})")
         ws.insert_rows(insert_at)
         ws.cell(row=insert_at, column=2, value=subcat)
         for col in range(3, 15):

@@ -19,6 +19,7 @@ class Translations:
         'file_management': 'ניהול קבצים',
         'import_files': 'ייבא קבצים',
         'refresh': 'רענן',
+        'refresh_all': 'רענן דשבורד',
         'files_count': 'קבצים: {count}',
         'total_size': 'גודל כולל: {size}',
         'drag_drop_hint': 'גרור קבצי Excel לכאן',
@@ -38,7 +39,7 @@ class Translations:
         'exit': 'יציאה',
 
         # Preview section
-        'preview': 'תצוגה מקדימה',
+        'year_overview': 'תצוגה שנתית',
         'table_tab': 'טבלה',
         'chart_tab': 'גרף',
         'year': 'שנה',
@@ -96,6 +97,7 @@ class Translations:
         'file_management': 'File Management',
         'import_files': 'Import Files',
         'refresh': 'Refresh',
+        'refresh_all': 'Refresh Dashboard',
         'files_count': 'Files: {count}',
         'total_size': 'Total Size: {size}',
         'drag_drop_hint': 'Drag Excel files here',
@@ -115,7 +117,7 @@ class Translations:
         'exit': 'Exit',
 
         # Preview section
-        'preview': 'Preview',
+        'year_overview': 'Year Overview',
         'table_tab': 'Table',
         'chart_tab': 'Chart',
         'year': 'Year',
