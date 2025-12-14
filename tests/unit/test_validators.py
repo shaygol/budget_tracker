@@ -1,28 +1,7 @@
+
 import pytest
 from pathlib import Path
-from code.validators import (
-    validate_file_path,
-    validate_file_size,
-    validate_file_extension,
-    sanitize_merchant_name,
-    validate_excel_file,
-    ValidationError,
-    MAX_FILE_SIZE_MB,
-    MAX_MERCHANT_NAME_LENGTH
-)
-
-# --- Path Validation Tests ---
-
-def test_validate_file_path_valid(tmp_path):
-    # Create a dummy file in the temp directory
-    safe_file = tmp_path / "safe.xlsx"
-    safe_file.touch()
-
-    # Should pass when base_dir is tmp_path
-    result = validate_file_path(safe_file, base_dir=tmp_path)
-import pytest
-from pathlib import Path
-from code.validators import (
+from src.validators import (
     validate_file_path,
     validate_file_size,
     validate_file_extension,

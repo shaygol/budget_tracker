@@ -1,3 +1,37 @@
+====================================================================================
+Improvements [New Version Tag]
+
+- **GUI Enhancements**
+- **Category Management**: Dialog to view, edit, and delete category
+mappings with search/filter
+- **Interactive Table Filtering**: Click category rows to filter
+charts by category/subcategory
+- **Undo/Redo**: History stack for category mapping changes (Ctrl+Z,
+Ctrl+Y)
+- **Keyboard Navigation**: Shortcuts (Ctrl+F, Esc, Enter) and
+improved tab navigation
+- **Visual Feedback**: Progress indicators, status messages with
+icons, tooltips, loading spinners
+
+- **Security & Data Integrity**
+- **Input Sanitization**: Enhanced validation to prevent directory
+traversal attacks
+- **Transaction Validation**: Structure, duplicate, and date range
+validation before dashboard write
+- **Error Handling**: File lock detection, dashboard corruption
+handling, user-friendly messages
+
+- **Code Quality**
+- **Test Coverage**: Comprehensive unit tests for GUI components
+(dialogs, widgets, threading)
+    - **Documentation**: Docstrings added to all GUI methods
+    - **Structured Logging**: Key-value logging with log rotation
+
+- **Deployment**
+- **Executable Creation**: PyInstaller bundling via
+`setup_deployment.bat`
+====================================================================================
+
 # Budget Tracker
 
 **Budget Tracker** is a Python-based tool for processing, categorizing, and summarizing monthly financial transactions from Excel files.
@@ -104,28 +138,18 @@ graph TD
     V -->|Removed Categories| X[Next Run: Prompt for Remapping]
 ```
 
-> **Important**: Never delete the Template sheet or rename it unless you also update the configuration in `code/config.py`.
+**Important**: Never delete the Template sheet or rename it unless you also update the configuration in `code/config.py`.
 
 ## Upcoming Features
 
 - **GUI Enhancements**
-    - **Category Management**: Add a dialog to view, edit, and delete existing category mappings directly from the GUI.
-    - **History View**: Add a tab to view a log of past imports and archived files.
-    - **Advanced Charts**: Add interactive pie charts and trend lines to the dashboard view.
-
-   - **Interactive Table Filtering**: Clicking a category row in the table (e.g., "רכב") should update the chart to show a breakdown of that category's subcategories or filter the chart to show that category's monthly trend.
-   - **Budget Goals**: Set monthly limits per category and track progress.
+    - **History View**: Add a tab to view a log of past imports and archived files
+    - **Advanced Charts**: Add interactive pie charts and trend lines to the dashboard view
+    - **Budget Goals**: Set monthly limits per category and track progress
 
 - **Reporting & Export**
-    - **PDF Reports**: Generate a printable monthly summary PDF.
-    - **CSV Export**: Option to export the processed data to a clean CSV file.
-
-- **Deployment**
-    - **Executable Creation**: Use PyInstaller to bundle the application into a single `.exe` file for easy distribution without Python installation.
-
-- **Bug Fixes & Maintenance**
-    - **Test Coverage**: Increase unit test coverage for `gui_app.py`.
-    - **Documentation**: Add docstrings to all GUI methods.
+    - **PDF Reports**: Generate a printable monthly summary PDF
+    - **CSV Export**: Option to export the processed data to a clean CSV file
 
 ## License
 This project is private and not intended for redistribution.

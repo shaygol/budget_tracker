@@ -1,14 +1,13 @@
-import sys
 import argparse
 import pandas as pd
-from code.file_manager import ensure_dirs
-from code.logger import setup_logging
-from code.file_manager import load_transaction_files
-from code.normalizer import Normalizer
-from code.category_manager import CategoryManager
-from code.previewer import Previewer
-from code.dashboard_writer import DashboardWriter
-from code.config import OUTPUT_DIR, LOG_FILE_NAME, TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH
+from src.file_manager import ensure_dirs
+from src.logger import setup_logging
+from src.file_manager import load_transaction_files
+from src.normalizer import Normalizer
+from src.category_manager import CategoryManager
+from src.previewer import Previewer
+from src.dashboard_writer import DashboardWriter
+from src.config import OUTPUT_DIR, LOG_FILE_NAME, TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH
 
 def main_cli():
     """Run in CLI mode (original functionality)."""

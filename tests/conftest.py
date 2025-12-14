@@ -7,10 +7,14 @@ import pytest
 import pandas as pd
 from pathlib import Path
 
-# Add the project root to sys.path so we can import 'code' module
+# Add the project root to sys.path so we can import 'src' module
 project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+
+
+
 
 
 @pytest.fixture
@@ -40,3 +44,10 @@ def sample_normalized_df():
         'subcat': ['Online', 'Groceries', 'Online'],
         'monthly_amount': [150.0, 50.0, 200.0]
     })
+
+
+@pytest.fixture
+def translations():
+    """Provide translations object for GUI tests."""
+    from src.translations import Translations
+    return Translations('en')

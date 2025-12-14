@@ -4,7 +4,7 @@ Tests for the Previewer class.
 """
 import pytest
 import pandas as pd
-from code.previewer import Previewer
+from src.previewer import Previewer
 
 
 def test_previewer_creates_summary(sample_normalized_df):

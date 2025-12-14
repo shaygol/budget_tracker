@@ -5,12 +5,12 @@ Tests for file management utilities.
 import pytest
 import pandas as pd
 from pathlib import Path
-from code.file_manager import ensure_dirs
+from src.file_manager import ensure_dirs
 
 
 def test_load_transaction_files_empty_directory(temp_dir):
     """Test loading from an empty directory."""
-    from code.file_manager import load_transaction_files
+    from src.file_manager import load_transaction_files
     result = load_transaction_files(temp_dir)
 
     assert result == []
