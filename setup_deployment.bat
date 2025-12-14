@@ -8,7 +8,7 @@
 :: Step 0: Run Tests
 :: -------------------------------------------------------------
 echo Running tests...
-.venv\Scripts\python.exe -m pytest
+venv\Scripts\python.exe -m pytest
 if %ERRORLEVEL% NEQ 0 (
     echo Tests failed! Aborting build.
     pause
@@ -22,18 +22,20 @@ echo Tests passed successfully.
 echo Building Budget Tracker executable...
 
 :: Check if icon exists, otherwise use NONE
-if exist "icon.ico" (
-    set ICON_ARG=--icon="icon.ico"
+if exist "badget_tracker.ico" (
+    set ICON_ARG=--icon="badget_tracker.ico"
+    set ICON_DATA=--add-data "badget_tracker.ico;."
 ) else (
     set ICON_ARG=--icon=NONE
+    set ICON_DATA=
 )
 
-.venv\Scripts\pyinstaller.exe ^
+venv\Scripts\pyinstaller.exe ^
     --name "BudgetTracker" ^
     --onefile ^
     --windowed ^
     %ICON_ARG% ^
-    --add-data "code;code" ^
+    %ICON_DATA% ^
     --hidden-import=pandas ^
     --hidden-import=openpyxl ^
     --hidden-import=matplotlib ^
@@ -66,6 +68,14 @@ if not exist "deployment" mkdir "deployment"
 echo Copying executable...
 copy "dist\BudgetTracker.exe" "deployment\" /Y
 
+:: Copy logo (icon) if present for distribution
+if exist "badget_tracker.ico" (
+    echo Copying application icon...
+    copy "badget_tracker.ico" "deployment\" /Y
+) else (
+    echo Icon file badget_tracker.ico not found - skipping icon copy.
+)
+
 :: Create UserFiles structure
 echo Creating UserFiles structure...
 if not exist "deployment\UserFiles" mkdir "deployment\UserFiles"
@@ -77,7 +87,7 @@ if not exist "deployment\UserFiles\backups\dashboard" mkdir "deployment\UserFile
 :: Step 3: Setup Dashboard (Copy & Clean)
 :: -------------------------------------------------------------
 echo Processing dashboard.xlsx...
-.venv\Scripts\python.exe setup_dashboard.py
+venv\Scripts\python.exe setup_dashboard.py
 
 :: -------------------------------------------------------------
 :: Step 4: Create Configuration Files
@@ -135,3 +145,4 @@ echo 2. Test the application by running deployment\BudgetTracker.exe
 echo 3. Zip the deployment folder to share with others
 echo.
 pause
+

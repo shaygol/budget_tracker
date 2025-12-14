@@ -3,4 +3,6 @@
 /UserFiles/**
 /output/**
 /deployment/**
+/venv/
+/.venv/
 

@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
-from code.normalizer import Normalizer
-from code.validators import sanitize_merchant_name
+from src.normalizer import Normalizer
+from src.validators import sanitize_merchant_name
 
 class TestSecurity:
     """Integration tests for security features."""

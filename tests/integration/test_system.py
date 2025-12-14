@@ -3,11 +3,11 @@ import pandas as pd
 import os
 from pathlib import Path
 from unittest.mock import patch
-from code.file_manager import load_transaction_files
-from code.normalizer import Normalizer
-from code.category_manager import CategoryManager
-from code.dashboard_writer import DashboardWriter
-from code.previewer import Previewer
+from src.file_manager import load_transaction_files
+from src.normalizer import Normalizer
+from src.category_manager import CategoryManager
+from src.dashboard_writer import DashboardWriter
+from src.previewer import Previewer
 from openpyxl import Workbook
 
 class TestSystemWorkflow:
@@ -67,9 +67,9 @@ class TestSystemWorkflow:
         df.to_excel(trans_file, index=False)
 
         # Patch paths in the modules where they are used
-        with patch('code.file_manager.ARCHIVE_DIR', env["archive"]), \
-             patch('code.file_manager.TRANSACTIONS_DIR', env["temp"]), \
-             patch('code.dashboard_writer.DASHBOARD_BACKUP_DIR', env["dash_backups"]):
+        with patch('src.file_manager.ARCHIVE_DIR', env["archive"]), \
+             patch('src.file_manager.TRANSACTIONS_DIR', env["temp"]), \
+             patch('src.dashboard_writer.DASHBOARD_BACKUP_DIR', env["dash_backups"]):
 
             # 1. Load (and Archive)
             # Note: load_transaction_files calls archive_files which uses ARCHIVE_DIR

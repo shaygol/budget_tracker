@@ -4,7 +4,7 @@ Tests for the Normalizer class.
 """
 import pytest
 import pandas as pd
-from code.normalizer import Normalizer
+from src.normalizer import Normalizer
 
 
 def test_normalizer_adds_year_month():

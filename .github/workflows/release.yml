@@ -1,0 +1,90 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Release Build
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if (Test-Path requirements.txt) { pip install -r requirements.txt }
+        pip install PyQt5-Qt5
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Test Logic Only (Skip GUI)
+      run: |
+        pytest -p no:faulthandler -k "not integration and not gui" --ignore=tests/integration/test_gui_integration.py --ignore=tests/unit/test_gui_dialogs.py --ignore=tests/unit/test_gui_widgets.py --ignore=tests/unit/test_gui_threading.py --ignore=tests/unit/test_gui_main_window.py
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --name "BudgetTracker" --onefile --windowed --icon="badget_tracker.ico" --add-data "badget_tracker.ico;." --hidden-import=pandas --hidden-import=openpyxl --hidden-import=matplotlib --hidden-import=matplotlib.backends.backend_qt5agg --hidden-import=PyQt5 --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtGui --hidden-import=PyQt5.QtWidgets --exclude-module=tkinter --noconsole --clean main.py
+    - name: Create Deployment Package
+      run: |
+        New-Item -ItemType Directory -Force -Path deployment
+        Copy-Item "dist\BudgetTracker.exe" -Destination "deployment\"
+        if (Test-Path "badget_tracker.ico") { Copy-Item "badget_tracker.ico" -Destination "deployment\" }
+        
+        New-Item -ItemType Directory -Force -Path "deployment\UserFiles"
+        New-Item -ItemType Directory -Force -Path "deployment\UserFiles\backups"
+        New-Item -ItemType Directory -Force -Path "deployment\UserFiles\backups\archive"
+        New-Item -ItemType Directory -Force -Path "deployment\UserFiles\backups\dashboard"
+        
+        if (Test-Path "UserFiles\dashboard.xlsx") { Copy-Item "UserFiles\dashboard.xlsx" -Destination "deployment\UserFiles\" }
+        Set-Content -Path "deployment\UserFiles\categories.json" -Value "{}"
+        
+        $readmeContent = @"
+        Budget Tracker - Deployment Package
+        ====================================
+        
+        CONTENTS:
+        - BudgetTracker.exe - The main application
+        - UserFiles/ - Your data folder
+          - dashboard.xlsx - Your budget dashboard (Template sheet only)
+          - categories.json - Your category mappings
+          - backups/archive/ - Processed transaction files
+          - backups/dashboard/ - Dashboard backups
+        
+        HOW TO USE:
+        1. Double-click BudgetTracker.exe to launch the application
+        2. Use the GUI to import transaction files
+        3. All your data will be saved in the UserFiles folder
+        
+        IMPORTANT:
+        - Keep the UserFiles folder next to BudgetTracker.exe
+        - The dashboard.xlsx MUST have a "Template" sheet with your categories
+        "@
+        Set-Content -Path "deployment\README.txt" -Value $readmeContent
+        
+    - name: Zip Deployment Package
+      run: |
+        Compress-Archive -Path deployment\* -DestinationPath BudgetTracker-Deployment.zip
+        
+    - name: Upload Deployment Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BudgetTracker-Deployment
+        path: BudgetTracker-Deployment.zip

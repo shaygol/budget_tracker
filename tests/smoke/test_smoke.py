@@ -4,7 +4,7 @@ These tests verify the actual file system state, not mocked logic.
 """
 import pytest
 from pathlib import Path
-from code.config import (
+from src.config import (
     DASHBOARD_FILE_PATH,
     CATEGORIES_FILE_PATH,
     USER_FILES_DIR,
@@ -67,14 +67,14 @@ class TestApplicationStartup:
     def test_import_core_modules(self):
         """Verify all core modules can be imported."""
         modules = [
-            'code.config',
-            'code.file_manager',
-            'code.normalizer',
-            'code.category_manager',
-            'code.dashboard_writer',
-            'code.previewer',
-            'code.validators',
-            'code.translations'
+            'src.config',
+            'src.file_manager',
+            'src.normalizer',
+            'src.category_manager',
+            'src.dashboard_writer',
+            'src.previewer',
+            'src.validators',
+            'src.translations'
         ]
 
         for module_name in modules:

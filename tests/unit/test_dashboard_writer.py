@@ -6,7 +6,7 @@ import pytest
 import pandas as pd
 from pathlib import Path
 from openpyxl import Workbook
-from code.dashboard_writer import DashboardWriter
+from src.dashboard_writer import DashboardWriter
 
 
 def test_dashboard_writer_validates_summary():

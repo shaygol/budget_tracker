@@ -6,7 +6,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from openpyxl import Workbook
-from code.category_manager import (
+from src.category_manager import (
     safe_get_cell_value,
     normalize_category_name,
     is_header_value,

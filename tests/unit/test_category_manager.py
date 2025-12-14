@@ -2,12 +2,10 @@
 """
 Tests for the CategoryManager class.
 """
-import pytest
 import pandas as pd
 import json
-from pathlib import Path
 from openpyxl import Workbook
-from code.category_manager import CategoryManager
+from src.category_manager import CategoryManager
 
 
 def create_dashboard_with_template(file_path):
