@@ -43,8 +43,24 @@ It supports Hebrew-language inputs and outputs a categorized summary into a pre-
 
 The application organizes your data in the `UserFiles` directory:
 - `UserFiles/dashboard.xlsx`: Your main dashboard file.
-- `UserFiles/categories.json`: Your saved category mappings.
+- `UserFiles/categories.json`: Your personal category mappings (overrides defaults).
 - `UserFiles/backups/`: Automatic backups of dashboard, archives and temporary location for processing files.
+- `src/default_categories.json`: Pre-configured merchant categories (read-only, included with the app).
+
+### Category System
+
+The Budget Tracker uses a two-tier category system:
+
+1. **Default Categories** (`src/default_categories.json`): 
+   - 200+ pre-configured Israeli merchants (supermarkets, gas stations, restaurants, etc.)
+   - Maintained by the application and updated with new versions
+   - Read-only - always loaded as the baseline
+
+2. **User Categories** (`UserFiles/categories.json`):
+   - Your personal mappings that override defaults
+   - New merchants you add are saved here
+   - You can override default mappings by confirming them through the GUI
+   - Empty by default - grows as you use the app
 
 ## Usage
 
@@ -149,7 +165,16 @@ _Note: This diagram reflects the up-to-date workflow, including mapping, dashboa
 **Important**: Never delete the Template sheet or rename it unless you also update the configuration in `src/config.py`.
 
 ====================================================================================
-## Recent Changes [v2.0] - 2026-01-30
+## Recent Changes [v2.1] - 2026-01-31
+
+- **Category System Refactoring**
+  - Separated default categories from user categories
+  - 200+ pre-configured Israeli merchants in `src/default_categories.json`
+  - User mappings now only save overrides in `UserFiles/categories.json`
+  - Cleaner data separation - defaults come with updates, user data stays intact
+
+====================================================================================
+## Previous Changes [v2.0] - 2026-01-30
 
 - **Daily Use Improvements**
   - Delete files with confirmation dialog

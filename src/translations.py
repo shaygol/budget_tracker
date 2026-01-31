@@ -51,7 +51,6 @@ class Translations:
         'total_spending': 'סה\"כ הוצאות',
         'avg_monthly': 'ממוצע חודשי',
         'top_category_label': 'קטגוריה מובילה',
-        'vs_average': 'לעומת הממוצע',
         'not_available': 'לא זמין',
 
         # Archive section

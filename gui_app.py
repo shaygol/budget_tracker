@@ -130,6 +130,8 @@ class ProcessThread(QThread):
             self.log_message.emit('INFO', f'Normalized {len(df)} transactions')
 
             if self._should_stop:
+                self.log_message.emit('INFO', 'Processing stopped by user')
+                self.finished.emit(pd.DataFrame(), False)
                 return
 
             # Category mapping
@@ -138,6 +140,8 @@ class ProcessThread(QThread):
             df = self._map_categories_gui(df, cat_mgr)
 
             if self._should_stop:
+                self.log_message.emit('INFO', 'Processing stopped by user')
+                self.finished.emit(pd.DataFrame(), False)
                 return
 
             # Preview
@@ -211,14 +215,15 @@ class ProcessThread(QThread):
 
         # Include merchants that are either:
         # 1. Not in category_map at all, OR
-        # 2. Have the "_default" flag (need user confirmation)
+        # 2. From default categories only (not user-confirmed)
+        default_map = cat_mgr._load_default_categories()
+        user_map = cat_mgr._load_user_categories()
+        
         unknown = [
             m for m in df['merchant'].unique()
             if m and (
                 m not in cat_mgr.category_map or
-                (isinstance(cat_mgr.category_map.get(m), list) and
-                 len(cat_mgr.category_map[m]) >= 3 and
-                 cat_mgr.category_map[m][2] == "_default")
+                (m in default_map and m not in user_map)
             )
         ]
 
@@ -266,6 +271,10 @@ class ProcessThread(QThread):
             # Restart timeout
             self.start_timeout()
 
+            # Check if cancelled after response
+            if self._should_stop:
+                return df
+
             if self.category_response:
                 cat, sub = self.category_response
                 cat_mgr.category_map[merchant] = [cat, sub]
@@ -304,6 +313,7 @@ class CategoryDialog(QDialog):
         self.choices = choices
         self.translations = translations
         self.selected_category = None
+        self.was_cancelled = False  # Track if user clicked Cancel vs Skip
 
         # Build category structure from choices
         self.category_structure = {}
@@ -364,9 +374,20 @@ class CategoryDialog(QDialog):
         self.subcategory_combo = QComboBox()
         layout.addWidget(self.subcategory_combo)
 
-        # Initialize subcategory dropdown with first category's subcategories
-        if sorted_categories:
-            self.update_subcategories(sorted_categories[0])
+        # Initialize subcategory dropdown with default category
+        # Try to default to "שונות" (Other), fallback to first category if not found
+        default_category = None
+        if "שונות" in self.category_structure:
+            default_category = "שונות"
+        elif sorted_categories:
+            default_category = sorted_categories[0]
+        
+        if default_category:
+            self.update_subcategories(default_category)
+            # Set combo box to default category
+            default_index = self.category_combo.findData(default_category)
+            if default_index >= 0:
+                self.category_combo.setCurrentIndex(default_index)
 
         # Progress text if provided
         if progress_text:
@@ -390,7 +411,7 @@ class CategoryDialog(QDialog):
         # OK/Cancel buttons
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
+        buttons.rejected.connect(self.cancel_processing)
         button_layout.addWidget(buttons)
 
         layout.addLayout(button_layout)
@@ -437,9 +458,23 @@ class CategoryDialog(QDialog):
                 self.subcategory_combo.addItem(sub, sub)
 
     def skip_merchant(self):
-        """Skip this merchant (reject dialog)."""
+        """Skip this merchant (continue to next merchant)."""
         self.selected_category = None
+        self.was_cancelled = False
         self.reject()
+    
+    def cancel_processing(self):
+        """Cancel the entire processing (stop processing all merchants)."""
+        self.selected_category = None
+        self.was_cancelled = True
+        self.reject()
+    
+    def reject(self):
+        """Handle dialog rejection (Cancel button or X)."""
+        # If not explicitly skipped, mark as cancelled
+        if not hasattr(self, 'was_cancelled'):
+            self.was_cancelled = True
+        super().reject()
 
     def accept(self):
         """
@@ -671,16 +706,14 @@ class QuickStatsWidget(QWidget):
         layout = QHBoxLayout()
         layout.setSpacing(10)
 
-        # Create 4 stat cards and store value label references
+        # Create 3 stat cards and store value label references
         self.total_card, self.total_value = self.create_stat_card(self.translations.get('total_spending', 'Total Spending'), "₪0.00")
         self.avg_card, self.avg_value = self.create_stat_card(self.translations.get('avg_monthly', 'Avg Monthly'), "₪0.00")
         self.top_category_card, self.top_category_value = self.create_stat_card(self.translations.get('top_category_label', 'Top Category'), "-")
-        self.change_card, self.change_value = self.create_stat_card(self.translations.get('vs_average', 'vs Avg'), "0%")
 
         layout.addWidget(self.total_card)
         layout.addWidget(self.avg_card)
         layout.addWidget(self.top_category_card)
-        layout.addWidget(self.change_card)
 
         layout.addStretch()
         self.setLayout(layout)
@@ -723,7 +756,6 @@ class QuickStatsWidget(QWidget):
             self.total_value.setText("₪0.00")
             self.avg_value.setText("₪0.00")
             self.top_category_value.setText("-")
-            self.change_value.setText(self.translations.get('not_available', 'N/A'))
             return
 
         # Total spending
@@ -743,19 +775,6 @@ class QuickStatsWidget(QWidget):
             self.top_category_value.setText(f"{top_category}\n₪{top_amount:,.2f}")
         else:
             self.top_category_value.setText("-")
-
-        # Change vs average monthly spending
-        if len(monthly_totals) >= 1:
-            current_month = monthly_totals.iloc[-1]
-            avg_monthly_val = monthly_totals.mean()
-            if avg_monthly_val > 0:
-                change_pct = ((current_month - avg_monthly_val) / avg_monthly_val) * 100
-                change_text = f"{change_pct:+.1f}%"
-            else:
-                change_text = self.translations.get('not_available', 'N/A')
-            self.change_value.setText(change_text)
-        else:
-            self.change_value.setText(self.translations.get('not_available', 'N/A'))
 
 
 class ChartWidget(QWidget):
@@ -1168,10 +1187,13 @@ class CategoryManagementDialog(QDialog):
         self.populate_table()
 
     def populate_table(self):
-        """Populate table with current category mappings."""
+        """Populate table with user-confirmed category mappings only (not defaults)."""
         self.table.setRowCount(0)
 
-        for merchant, mapping in self.category_manager.category_map.items():
+        # Load user categories only (excluding defaults)
+        user_categories = self.category_manager._load_user_categories()
+
+        for merchant, mapping in user_categories.items():
             # Skip invalid entries (empty merchant or invalid mapping format)
             if not merchant or not mapping:
                 continue
@@ -2250,6 +2272,7 @@ class BudgetTrackerGUI(QMainWindow):
 
         Displays a modal dialog asking user to assign a category/subcategory to
         an unknown merchant. Updates the processing thread with the user's selection.
+        If user cancels (vs skip), stops the processing thread.
 
         Args:
             merchant: Name of the merchant requiring category assignment
@@ -2267,9 +2290,18 @@ class BudgetTrackerGUI(QMainWindow):
             suggested_category=suggested_category,
             progress_text=progress_text
         )
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        result = dialog.exec()
+        
+        if result == QDialog.DialogCode.Accepted:
+            # User selected a category
             self.thread.category_response = dialog.selected_category
+        elif dialog.was_cancelled:
+            # User clicked Cancel or X - stop the entire process
+            self.thread.category_response = None
+            self.thread.stop()
+            self.log_viewer.add_log('INFO', 'Processing cancelled by user')
         else:
+            # User clicked Skip - continue with next merchant
             self.thread.category_response = None
 
         self.thread.response_ready = True

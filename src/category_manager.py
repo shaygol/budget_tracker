@@ -9,7 +9,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
 from src.previewer import format_prompt
-from src.config import TEMPLATE_SHEET_NAME, MAX_CATEGORIES
+from src.config import TEMPLATE_SHEET_NAME, MAX_CATEGORIES, DEFAULT_CATEGORIES_FILE_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -131,11 +131,63 @@ class CategoryManager:
         self.valid_categories = self.load_category_structure_from_template(strict=strict_validation, use_cache=True)
 
     def _load_category_map(self) -> Dict[str, List[str]]:
+        """
+        Load and merge category mappings from default and user files.
+        User mappings override default mappings.
+        
+        Returns:
+            Dictionary mapping merchant names to [category, subcategory] lists
+        """
+        # Start with default categories
+        default_map = self._load_default_categories()
+        
+        # Load user categories (overrides defaults)
+        user_map = self._load_user_categories()
+        
+        # Merge: user overrides default
+        merged_map = {**default_map, **user_map}
+        
+        logger.info(f"Loaded {len(default_map)} default categories and {len(user_map)} user categories")
+        return merged_map
+
+    def _load_default_categories(self) -> Dict[str, List[str]]:
+        """
+        Load default category mappings from src/default_categories.json
+        
+        Returns:
+            Dictionary of default mappings
+        """
+        try:
+            with open(DEFAULT_CATEGORIES_FILE_PATH, 'r', encoding='utf-8') as f:
+                default_map = json.load(f)
+                # Ensure all entries are properly formatted [category, subcategory]
+                return {
+                    merchant: mapping if isinstance(mapping, list) and len(mapping) >= 2 else []
+                    for merchant, mapping in default_map.items()
+                }
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Could not load default categories: {e}")
+            return {}
+
+    def _load_user_categories(self) -> Dict[str, List[str]]:
+        """
+        Load user-specific category mappings from UserFiles/categories.json
+        
+        Returns:
+            Dictionary of user mappings
+        """
         try:
             with open(self.categories_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                user_map = json.load(f)
+                # Clean up: remove _default flag if present and ensure proper format
+                cleaned_map = {}
+                for merchant, mapping in user_map.items():
+                    if isinstance(mapping, list) and len(mapping) >= 2:
+                        # Keep only [category, subcategory], strip _default flag
+                        cleaned_map[merchant] = mapping[:2]
+                return cleaned_map
         except (FileNotFoundError, json.JSONDecodeError):
-            logger.warning(f"Categories file not found or invalid: {self.categories_path}. Starting with empty map.")
+            logger.warning(f"User categories file not found or invalid: {self.categories_path}. Starting with empty map.")
             return {}
 
     def validate_template_structure(self) -> ValidationResult:
@@ -533,8 +585,10 @@ class CategoryManager:
         """
         Find a similar merchant in category_map and return its category.
 
-        Uses simple substring/prefix matching to find merchants with similar names.
-        For example, "AMAZON.COM" would match "AMAZON PRIME".
+        Uses multiple matching strategies:
+        1. Exact match
+        2. Prefix matching (e.g., "AMAZON.COM" matches "AMAZON PRIME")
+        3. Keyword matching (e.g., "ביטוח חובה" matches "ביטוח")
 
         Args:
             merchant_name: Name of the merchant to find a match for
@@ -560,9 +614,14 @@ class CategoryManager:
                     logger.debug(f"Found exact match for '{merchant_name}': {cat} > {sub}")
                     return (cat, sub)
 
-        # PRIORITY 2: Try prefix matching - find the longest matching prefix
-        best_match = None
-        best_length = 0
+        # PRIORITY 2 & 3: Try both prefix and substring matching, pick the best
+        prefix_match = None
+        prefix_length = 0
+        prefix_merchant = None
+        
+        substring_match = None
+        substring_length = 0
+        substring_merchant = None
 
         if self.category_map:
             for existing_merchant, mapping in self.category_map.items():
@@ -573,7 +632,7 @@ class CategoryManager:
                 cat, sub = mapping[0], mapping[1]
                 existing_upper = existing_merchant.upper().strip()
 
-                # Check if one is a prefix of the other (minimum 4 characters)
+                # Check prefix matching (minimum 4 characters)
                 if len(merchant_upper) >= 4 and len(existing_upper) >= 4:
                     if merchant_upper.startswith(existing_upper[:4]) or existing_upper.startswith(merchant_upper[:4]):
                         # Calculate common prefix length
@@ -584,28 +643,66 @@ class CategoryManager:
                             else:
                                 break
 
-                        if common_length >= 4 and common_length > best_length:
-                            best_match = (cat, sub)
-                            best_length = common_length
+                        if common_length >= 4 and common_length > prefix_length:
+                            prefix_match = (cat, sub)
+                            prefix_length = common_length
+                            prefix_merchant = existing_merchant
+                
+                # Check longest common substring
+                max_len = 0
+                merchant_len = len(merchant_upper)
+                existing_len = len(existing_upper)
+                
+                # Use dynamic programming to find longest common substring
+                for i in range(merchant_len):
+                    for j in range(existing_len):
+                        length = 0
+                        while (i + length < merchant_len and 
+                               j + length < existing_len and 
+                               merchant_upper[i + length] == existing_upper[j + length]):
+                            length += 1
+                        if length > max_len:
+                            max_len = length
+                
+                # Require minimum length of 4 characters for match
+                if max_len >= 4 and max_len > substring_length:
+                    substring_match = (cat, sub)
+                    substring_length = max_len
+                    substring_merchant = existing_merchant
 
-        if best_match:
-            logger.debug(f"Found prefix match for '{merchant_name}': {best_match[0]} > {best_match[1]}")
-            return best_match
+        # Choose the best match: prefer longer match
+        if substring_length > prefix_length and substring_match:
+            logger.debug(f"Found substring match for '{merchant_name}' with '{substring_merchant}' (length {substring_length}): {substring_match[0]} > {substring_match[1]}")
+            return substring_match
+        elif prefix_match:
+            logger.debug(f"Found prefix match for '{merchant_name}' with '{prefix_merchant}' (length {prefix_length}): {prefix_match[0]} > {prefix_match[1]}")
+            return prefix_match
 
         return None
 
     def save_categories(self) -> None:
         """
-        Save category mappings to file.
-        Preserves _default flag for preloaded mappings that haven't been confirmed by user.
-        User-confirmed mappings (from GUI) are saved without the flag.
+        Save only user-confirmed category mappings to file.
+        Default categories are not saved (they're always loaded from default_categories.json).
+        Only saves mappings that differ from defaults or are new.
         """
-        # Save mappings as-is, preserving _default flag where present
-        cleaned_map = {}
+        # Load defaults for comparison
+        default_map = self._load_default_categories()
+        
+        # Save only mappings that are different from defaults or not in defaults
+        user_only_map = {}
         for merchant, mapping in self.category_map.items():
             if isinstance(mapping, list) and len(mapping) >= 2:
-                # Keep the full mapping (including _default if it's a 3-element list)
-                cleaned_map[merchant] = mapping
+                # Keep only [category, subcategory]
+                clean_mapping = mapping[:2]
+                
+                # Save if:
+                # 1. Merchant not in defaults, OR
+                # 2. Mapping differs from default
+                if merchant not in default_map or clean_mapping != default_map.get(merchant, [])[:2]:
+                    user_only_map[merchant] = clean_mapping
         
         with open(self.categories_path, 'w', encoding='utf-8') as f:
-            json.dump(cleaned_map, f, ensure_ascii=False, indent=2)
+            json.dump(user_only_map, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"Saved {len(user_only_map)} user-specific category mappings")
