@@ -9,19 +9,46 @@ from src.config import SUPPORTED_EXTENSIONS, ARCHIVE_DIR, TRANSACTIONS_DIR, FILE
 
 logger = logging.getLogger(__name__)
 
+def _normalize_for_matching(text: str) -> str:
+    """
+    Normalize text for flexible header matching.
+    Removes quotes, extra spaces, and converts to lowercase for comparison.
+    """
+    # Remove various quote characters
+    text = text.replace('"', '').replace("'", '').replace('"', '').replace('"', '').replace("'", '').replace("'", '')
+    # Remove extra spaces and convert to lowercase
+    text = ' '.join(text.split()).lower()
+    return text
+
 def _detect_header_row(raw: pd.DataFrame) -> Optional[int]:
     """
     Detects the header row index in a raw DataFrame by searching for common keywords.
+    Uses flexible matching to handle variations in formatting.
+    Only searches first 10 rows to avoid false positives from summary rows.
     """
-    for i, row in raw.iterrows():
+    # Limit search to first 10 rows to avoid matching summary/footer rows
+    max_rows = min(10, len(raw))
+    
+    for i in range(max_rows):
+        row = raw.iloc[i]
         line = ' '.join(str(cell) for cell in row)
-        has_date = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['mandatory']['transaction_date'])
-        has_merchant = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['mandatory']['merchant'])
-        has_amount = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['mandatory']['amount'])
-        has_card = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['optional']['card'])
-        has_misc = any(keyword in line for keyword in FILE_HEADER_KEYWORDS['optional']['misc'])
+        line_normalized = _normalize_for_matching(line)
+        
+        # Check each mandatory field with normalized matching
+        has_date = any(_normalize_for_matching(keyword) in line_normalized 
+                      for keyword in FILE_HEADER_KEYWORDS['mandatory']['transaction_date'])
+        has_merchant = any(_normalize_for_matching(keyword) in line_normalized 
+                          for keyword in FILE_HEADER_KEYWORDS['mandatory']['merchant'])
+        has_amount = any(_normalize_for_matching(keyword) in line_normalized 
+                        for keyword in FILE_HEADER_KEYWORDS['mandatory']['amount'])
+        has_card = any(_normalize_for_matching(keyword) in line_normalized 
+                      for keyword in FILE_HEADER_KEYWORDS['optional']['card'])
+        has_misc = any(_normalize_for_matching(keyword) in line_normalized 
+                      for keyword in FILE_HEADER_KEYWORDS['optional']['misc'])
+        
         flags = [has_card, has_date, has_amount, has_merchant, has_misc]
-        if  sum(flags) > len(FILE_HEADER_KEYWORDS['mandatory']):
+        # If we have all 3 mandatory fields, that's good enough
+        if has_date and has_merchant and has_amount:
             return i
 
     return None

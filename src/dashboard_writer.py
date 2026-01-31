@@ -273,7 +273,10 @@ class DashboardWriter:
                 subcat_cell = ws.cell(row=r, column=2)
                 val = subcat_cell.value
                 if isinstance(val, str):
-                    mapping[(cat, val.strip())] = r
+                    clean_subcat = val.strip()
+                    mapping[(cat, clean_subcat)] = r
+                    logger.debug(f"Mapped: ({cat}, {clean_subcat}) -> row {r}")
+        logger.debug(f"Total subcategories mapped: {len(mapping)}")
         return mapping
 
     def _add_new_category(self, ws: Worksheet, category: str) -> None:

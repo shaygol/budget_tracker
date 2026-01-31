@@ -77,6 +77,7 @@ class Translations:
         'showing_all_categories': 'מציג את כל הקטגוריות',
         'filtered_by_category': 'מסונן לפי: {category}',
         'category_details': 'פרטי קטגוריה',
+        'subcategories_breakdown': 'פירוט תתי-קטגוריות',
         'reprocess_question': 'האם ברצונך לעבד מחדש את העסקאות כעת כדי לעדכן את הדשבורד?',
         'reprocess_note': '(תוכל גם לעשות זאת מאוחר יותר על ידי לחיצה על "עבד עסקאות")',
         'mapping_updated': 'מיפוי קטגוריות עודכן',
@@ -90,6 +91,13 @@ class Translations:
         'reprocess_required': 'נדרש עיבוד מחדש',
         'reprocess_required_note': 'על מנת שהשינויים יופיעו בדשבורד, יש לעבד מחדש את העסקאות',
 
+        # File operations
+        'delete_file': '🗑️ מחק קובץ נבחר',
+        'delete_file_confirm': 'למחוק את הקובץ',
+        'file_deleted': 'הקובץ נמחק בהצלחה',
+        'select_file_to_delete': 'אנא בחר קובץ למחיקה',
+        'open_archive': '📦 פתח ארכיון',
+        
         # Messages
         'no_files': 'לא נמצאו קבצי עסקאות',
         'select_files': 'בחר קבצי Excel',
@@ -195,6 +203,7 @@ class Translations:
         'showing_all_categories': 'Showing all categories',
         'filtered_by_category': 'Filtered by: {category}',
         'category_details': 'Category Details',
+        'subcategories_breakdown': 'Subcategories Breakdown',
         'reprocess_question': 'Would you like to reprocess transactions now to update the dashboard?',
         'reprocess_note': '(You can also do this later by clicking "Process Transactions")',
         'mapping_updated': 'Category mapping updated',
@@ -219,6 +228,13 @@ class Translations:
         'defaults_restored': 'Default settings restored.',
         'settings_saved': 'Settings saved successfully.\n\nLog level changed. New messages will use the new level.',
 
+        # File operations
+        'delete_file': '🗑️ Delete Selected File',
+        'delete_file_confirm': 'Delete file',
+        'file_deleted': 'File deleted successfully',
+        'select_file_to_delete': 'Please select a file to delete',
+        'open_archive': '📦 Open Archive',
+        
         # Messages
         'no_files': 'No transaction files found',
         'select_files': 'Select Excel Files',

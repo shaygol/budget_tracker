@@ -1,10 +1,10 @@
 # Dependencies
-pandas
-openpyxl
-PyQt5>=5.15.0
-matplotlib>=3.7.0
+pandas  # Data manipulation and transaction processing
+openpyxl  # Excel file reading and writing
+PyQt5>=5.15.0  # Modern GUI framework
+matplotlib>=3.7.0  # Charts and graphs generation
 
 # Testing
-pytest>=7.0.0
-pytest-qt>=4.0.0
-pyinstaller>=6.0.0
+pytest>=7.0.0  # Testing framework
+pytest-qt>=4.0.0  # PyQt5 GUI testing
+pyinstaller>=6.0.0  # Executable bundling

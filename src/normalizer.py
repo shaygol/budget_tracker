@@ -21,8 +21,14 @@ class Normalizer:
 
     @staticmethod
     def _clean_name(name: str) -> str:
+        """
+        Clean column names by normalizing unicode and removing directional marks.
+        Also removes various quote characters for flexible matching.
+        """
         s = unicodedata.normalize("NFKD", str(name))
         s = re.sub(r'[\n\r\t\u200f\u200e]', "", s)
+        # Remove various quote characters for flexible matching
+        s = s.replace('"', '').replace("'", '').replace('"', '').replace('"', '').replace("'", '').replace("'", '')
         return s.strip()
 
     def _build_alias_map(self, keywords: dict) -> dict[str, str]:

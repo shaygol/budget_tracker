@@ -542,41 +542,70 @@ class CategoryManager:
         Returns:
             Tuple of (category, subcategory) if match found, None otherwise
         """
-        if not merchant_name or not self.category_map:
+        if not merchant_name:
             return None
 
         merchant_upper = merchant_name.upper().strip()
 
-        # Try exact match first (case-insensitive)
-        for existing_merchant, (cat, sub) in self.category_map.items():
-            if existing_merchant.upper().strip() == merchant_upper:
-                return (cat, sub)
+        # PRIORITY 1: Try exact match
+        if self.category_map:
+            for existing_merchant, mapping in self.category_map.items():
+                # Skip invalid entries
+                if not existing_merchant or not isinstance(mapping, (list, tuple)) or len(mapping) < 2:
+                    continue
+                
+                cat, sub = mapping[0], mapping[1]
+                
+                if existing_merchant.upper().strip() == merchant_upper:
+                    logger.debug(f"Found exact match for '{merchant_name}': {cat} > {sub}")
+                    return (cat, sub)
 
-        # Try prefix matching (e.g., "AMAZON" matches "AMAZON PRIME")
-        # Find the longest matching prefix
+        # PRIORITY 2: Try prefix matching - find the longest matching prefix
         best_match = None
-        best_match_length = 0
+        best_length = 0
 
-        for existing_merchant, (cat, sub) in self.category_map.items():
-            existing_upper = existing_merchant.upper().strip()
+        if self.category_map:
+            for existing_merchant, mapping in self.category_map.items():
+                # Skip invalid entries
+                if not existing_merchant or not isinstance(mapping, (list, tuple)) or len(mapping) < 2:
+                    continue
+                    
+                cat, sub = mapping[0], mapping[1]
+                existing_upper = existing_merchant.upper().strip()
 
-            # Check if one is a prefix of the other (minimum 4 characters)
-            if len(merchant_upper) >= 4 and len(existing_upper) >= 4:
-                if merchant_upper.startswith(existing_upper[:4]) or existing_upper.startswith(merchant_upper[:4]):
-                    # Calculate common prefix length
-                    common_length = 0
-                    for i in range(min(len(merchant_upper), len(existing_upper))):
-                        if merchant_upper[i] == existing_upper[i]:
-                            common_length += 1
-                        else:
-                            break
+                # Check if one is a prefix of the other (minimum 4 characters)
+                if len(merchant_upper) >= 4 and len(existing_upper) >= 4:
+                    if merchant_upper.startswith(existing_upper[:4]) or existing_upper.startswith(merchant_upper[:4]):
+                        # Calculate common prefix length
+                        common_length = 0
+                        for i in range(min(len(merchant_upper), len(existing_upper))):
+                            if merchant_upper[i] == existing_upper[i]:
+                                common_length += 1
+                            else:
+                                break
 
-                    if common_length > best_match_length and common_length >= 4:
-                        best_match = (cat, sub)
-                        best_match_length = common_length
+                        if common_length >= 4 and common_length > best_length:
+                            best_match = (cat, sub)
+                            best_length = common_length
 
-        return best_match
+        if best_match:
+            logger.debug(f"Found prefix match for '{merchant_name}': {best_match[0]} > {best_match[1]}")
+            return best_match
+
+        return None
 
     def save_categories(self) -> None:
+        """
+        Save category mappings to file.
+        Preserves _default flag for preloaded mappings that haven't been confirmed by user.
+        User-confirmed mappings (from GUI) are saved without the flag.
+        """
+        # Save mappings as-is, preserving _default flag where present
+        cleaned_map = {}
+        for merchant, mapping in self.category_map.items():
+            if isinstance(mapping, list) and len(mapping) >= 2:
+                # Keep the full mapping (including _default if it's a 3-element list)
+                cleaned_map[merchant] = mapping
+        
         with open(self.categories_path, 'w', encoding='utf-8') as f:
-            json.dump(self.category_map, f, ensure_ascii=False, indent=2)
+            json.dump(cleaned_map, f, ensure_ascii=False, indent=2)
