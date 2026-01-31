@@ -112,6 +112,11 @@ def setup_error_reporting(error_dir: Optional[Path] = None) -> ErrorReporter:
 
     def exception_hook(exctype, value, tb):
         """Global exception handler."""
+        # Ignore user interrupts and system exits - these are not errors
+        if exctype in (KeyboardInterrupt, SystemExit):
+            sys.__excepthook__(exctype, value, tb)
+            return
+        
         error_id = reporter.capture_exception(exctype, value, tb)
         logger.critical(f"Unhandled exception (ID: {error_id}): {value}", exc_info=(exctype, value, tb))
 

@@ -29,11 +29,8 @@ TEMPLATE_SHEET_NAME = "Template"
 
 SUPPORTED_EXTENSIONS = ['.xlsx', '.xls']
 
-# Default log level - can be overridden by settings.json
+# Default log level
 LOG_SEVERITY = logging.DEBUG
-
-# Settings file for user preferences
-SETTINGS_FILE = USER_FILES_DIR / 'settings.json'
 
 # Mapping from string to logging level
 LOG_LEVEL_MAP = {
@@ -50,54 +47,12 @@ LOG_LEVEL_NAMES = {v: k for k, v in LOG_LEVEL_MAP.items()}
 
 def get_log_level() -> int:
     """
-    Get current log level from settings.json or use default from config.py.
+    Get current log level from config.py.
 
     Returns:
         Logging level constant (e.g., logging.DEBUG)
     """
-    if SETTINGS_FILE.exists():
-        try:
-            import json
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-                level_name = settings.get('log_level', None)
-                if level_name and level_name.upper() in LOG_LEVEL_MAP:
-                    return LOG_LEVEL_MAP[level_name.upper()]
-        except (json.JSONDecodeError, IOError):
-            pass
-
-    # Fallback to config.py default
     return LOG_SEVERITY
-
-
-def set_log_level(level_name: str) -> None:
-    """
-    Set log level and save to settings.json.
-
-    Args:
-        level_name: Log level name ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
-    """
-    if level_name.upper() not in LOG_LEVEL_MAP:
-        raise ValueError(f"Invalid log level: {level_name}")
-
-    import json
-
-    # Load existing settings or create new
-    settings = {}
-    if SETTINGS_FILE.exists():
-        try:
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            settings = {}
-
-    # Update log level
-    settings['log_level'] = level_name.upper()
-
-    # Save to file
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, indent=2, ensure_ascii=False)
 
 
 def get_log_level_name() -> str:
@@ -111,34 +66,16 @@ def get_log_level_name() -> str:
     return LOG_LEVEL_NAMES.get(level, 'DEBUG')
 
 
-def reset_log_level_to_default() -> None:
-    """Reset log level to default from config.py."""
-    if SETTINGS_FILE.exists():
-        try:
-            import json
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-                settings.pop('log_level', None)
-
-            # If settings is now empty, delete file; otherwise save
-            if not settings:
-                SETTINGS_FILE.unlink()
-            else:
-                with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(settings, f, indent=2, ensure_ascii=False)
-        except (json.JSONDecodeError, IOError):
-            pass
-
 FILE_HEADER_KEYWORDS = {
     'mandatory': {
-        'transaction_date': ['תאריך', 'תאריך עסקה'],
-        'merchant': ['שם בית העסק', 'שם בית עסק'],
-        'amount': ['סכום', 'סכום חיוב בש\'\'ח', 'סכום חיוב'],
+        'transaction_date': ['תאריך', 'תאריך עסקה', 'תאריך רכישה', 'date'],
+        'merchant': ['שם בית העסק', 'שם בית עסק', 'בית עסק', 'עסק', 'merchant'],
+        'amount': ['סכום', 'סכום חיוב', 'סכום חיוב בשח', 'סכום עסקה', 'amount'],
     },
     'optional': {
         'charge_due_date': ['חיוב לתאריך'],
         'purchase_amount': ['סכום קנייה', 'סכום עסקה מקורי'],
-        'card': ['שם כרטיס', '4 ספרות אחרונות', 'ספרות אחרונות'],
+        'card': ['שם כרטיס', '4 ספרות אחרונות', 'ספרות אחרונות', 'כרטיס'],
         'misc': ['ענף', 'הערות'],
     }
 }
