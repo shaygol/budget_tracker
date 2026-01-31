@@ -2,6 +2,7 @@ import json
 import sys
 import logging
 import re
+import pkgutil
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass, field
 import pandas as pd
@@ -9,7 +10,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
 from src.previewer import format_prompt
-from src.config import TEMPLATE_SHEET_NAME, MAX_CATEGORIES, DEFAULT_CATEGORIES_FILE_PATH
+from src.config import TEMPLATE_SHEET_NAME, MAX_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -152,22 +153,47 @@ class CategoryManager:
 
     def _load_default_categories(self) -> Dict[str, List[str]]:
         """
-        Load default category mappings from src/default_categories.json
+        Load default category mappings from bundled JSON resource.
         
         Returns:
             Dictionary of default mappings
         """
         try:
-            with open(DEFAULT_CATEGORIES_FILE_PATH, 'r', encoding='utf-8') as f:
-                default_map = json.load(f)
+            # Try loading as package resource (works in compiled exe)
+            data = pkgutil.get_data('src', 'default_categories.json')
+            if data:
+                default_map = json.loads(data.decode('utf-8'))
+                logger.debug(f"Loaded {len(default_map)} default categories from package resource")
                 # Ensure all entries are properly formatted [category, subcategory]
                 return {
                     merchant: mapping if isinstance(mapping, list) and len(mapping) >= 2 else []
                     for merchant, mapping in default_map.items()
                 }
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.warning(f"Could not load default categories: {e}")
-            return {}
+        except Exception as e:
+            logger.debug(f"Could not load from package resource: {e}")
+        
+        # Fallback: try loading from file system (development/testing)
+        try:
+            # Try multiple possible locations
+            possible_paths = [
+                Path(__file__).parent / 'default_categories.json',  # Same dir as this file
+                Path(__file__).parent.parent / 'src' / 'default_categories.json',  # From project root
+            ]
+            
+            for default_file in possible_paths:
+                if default_file.exists():
+                    with open(default_file, 'r', encoding='utf-8') as f:
+                        default_map = json.load(f)
+                        logger.debug(f"Loaded {len(default_map)} default categories from {default_file}")
+                        return {
+                            merchant: mapping if isinstance(mapping, list) and len(mapping) >= 2 else []
+                            for merchant, mapping in default_map.items()
+                        }
+        except Exception as e2:
+            logger.warning(f"Could not load default categories from file: {e2}")
+        
+        logger.warning("No default categories loaded")
+        return {}
 
     def _load_user_categories(self) -> Dict[str, List[str]]:
         """

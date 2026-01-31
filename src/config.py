@@ -22,7 +22,6 @@ DASHBOARD_BACKUP_DIR = BACKUPS_ROOT / 'dashboard'
 
 # Files
 CATEGORIES_FILE_PATH = USER_FILES_DIR / 'categories.json'
-DEFAULT_CATEGORIES_FILE_PATH = BASE_DIR / 'src' / 'default_categories.json'
 DASHBOARD_FILE_PATH = USER_FILES_DIR / 'dashboard.xlsx'
 
 LOG_FILE_NAME = 'budget.log'
