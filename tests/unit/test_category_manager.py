@@ -30,21 +30,28 @@ def create_dashboard_with_template(file_path):
 
 
 def test_category_manager_loads_categories(temp_dir):
-    """Test that CategoryManager loads categories from JSON."""
+    """Test that CategoryManager loads categories from JSON (user + default)."""
     categories_file = temp_dir / 'categories.json'
-    categories = {
+    user_categories = {
         'Amazon': ['Shopping', 'Online'],
         'Supermarket': ['Food', 'Groceries']
     }
     with open(categories_file, 'w', encoding='utf-8') as f:
-        json.dump(categories, f)
+        json.dump(user_categories, f)
 
     dashboard_file = temp_dir / 'dashboard.xlsx'
     create_dashboard_with_template(dashboard_file)
 
     manager = CategoryManager(categories_file, dashboard_file)
 
-    assert manager.category_map == categories
+    # Check that user categories are loaded
+    assert 'Amazon' in manager.category_map
+    assert manager.category_map['Amazon'] == ['Shopping', 'Online']
+    assert 'Supermarket' in manager.category_map
+    assert manager.category_map['Supermarket'] == ['Food', 'Groceries']
+    
+    # Check that default categories are also loaded (merged)
+    assert len(manager.category_map) > len(user_categories)  # Should have defaults too
 
 
 def test_category_manager_saves_categories(temp_dir):

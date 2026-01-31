@@ -24,10 +24,10 @@ def _detect_header_row(raw: pd.DataFrame) -> Optional[int]:
     """
     Detects the header row index in a raw DataFrame by searching for common keywords.
     Uses flexible matching to handle variations in formatting.
-    Only searches first 10 rows to avoid false positives from summary rows.
+    Searches first 50 rows to find header in files with multi-section layouts.
     """
-    # Limit search to first 10 rows to avoid matching summary/footer rows
-    max_rows = min(10, len(raw))
+    # Search up to 50 rows to handle files with multiple sections
+    max_rows = min(50, len(raw))
     
     for i in range(max_rows):
         row = raw.iloc[i]

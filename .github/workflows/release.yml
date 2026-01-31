@@ -79,12 +79,8 @@ jobs:
         "@
         Set-Content -Path "deployment\README.txt" -Value $readmeContent
         
-    - name: Zip Deployment Package
-      run: |
-        Compress-Archive -Path deployment\* -DestinationPath BudgetTracker-Deployment.zip
-        
     - name: Upload Deployment Artifact
       uses: actions/upload-artifact@v4
       with:
         name: BudgetTracker-Deployment
-        path: BudgetTracker-Deployment.zip
+        path: deployment/
