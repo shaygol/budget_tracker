@@ -41,7 +41,7 @@ jobs:
         pytest -p no:faulthandler -k "not integration and not gui" --ignore=tests/integration/test_gui_integration.py --ignore=tests/unit/test_gui_dialogs.py --ignore=tests/unit/test_gui_widgets.py --ignore=tests/unit/test_gui_threading.py --ignore=tests/unit/test_gui_main_window.py
     - name: Build with PyInstaller
       run: |
-        pyinstaller --name "BudgetTracker" --onefile --windowed --icon="badget_tracker.ico" --add-data "badget_tracker.ico;." --hidden-import=pandas --hidden-import=openpyxl --hidden-import=matplotlib --hidden-import=matplotlib.backends.backend_qt5agg --hidden-import=PyQt5 --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtGui --hidden-import=PyQt5.QtWidgets --exclude-module=tkinter --noconsole --clean main.py
+        pyinstaller --name "BudgetTracker" --onefile --windowed --icon="badget_tracker.ico" --add-data "badget_tracker.ico;." --add-data "src/default_categories.json;src" --hidden-import=pandas --hidden-import=openpyxl --hidden-import=matplotlib --hidden-import=matplotlib.backends.backend_qt5agg --hidden-import=PyQt5 --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtGui --hidden-import=PyQt5.QtWidgets --exclude-module=tkinter --noconsole --clean main.py
     - name: Create Deployment Package
       run: |
         New-Item -ItemType Directory -Force -Path deployment

@@ -36,6 +36,7 @@ venv\Scripts\pyinstaller.exe ^
     --windowed ^
     %ICON_ARG% ^
     %ICON_DATA% ^
+    --add-data "src/default_categories.json;src" ^
     --hidden-import=pandas ^
     --hidden-import=openpyxl ^
     --hidden-import=matplotlib ^
