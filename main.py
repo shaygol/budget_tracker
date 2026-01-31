@@ -37,7 +37,9 @@ def main_cli():
 
 def main():
     """Main entry point - launches GUI by default."""
-    parser = argparse.ArgumentParser(description='Budget Tracker - Process and categorize financial transactions')
+    parser = argparse.ArgumentParser(
+        description='Budget Tracker - Modern GUI for transaction management, categorization, and reporting'
+    )
     parser.add_argument('--cli', action='store_true', help='Run in CLI mode instead of GUI')
 
     args = parser.parse_args()

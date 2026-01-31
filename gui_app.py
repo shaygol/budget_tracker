@@ -6,15 +6,18 @@ Provides a modern interface for transaction processing with bilingual support.
 import sys
 import os
 import shutil
+import hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple
 import pandas as pd
 import logging
 
 # Suppress matplotlib debug logging
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logging.getLogger('PIL').setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
 
 # Fix for PyQt5 platform plugin issue
 import PyQt5
@@ -45,12 +48,34 @@ from src.translations import Translations  # noqa: E402
 from src.file_utils import is_file_locked, validate_dashboard_integrity, get_user_friendly_error, check_file_permissions  # noqa: E402
 
 
+def calculate_file_hash(file_path: Path, chunk_size: int = 8192) -> Optional[str]:
+    """
+    Calculate SHA256 hash of a file.
+    
+    Args:
+        file_path: Path to file
+        chunk_size: Size of chunks to read (for large files)
+    
+    Returns:
+        Hex string of file hash or None if error
+    """
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(chunk_size), b""):
+                sha256_hash.update(chunk)
+        return sha256_hash.hexdigest()
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to calculate hash for {file_path}: {e}")
+        return None
+
+
 class ProcessThread(QThread):
     """Background thread for processing transactions."""
     progress = pyqtSignal(str)
     finished = pyqtSignal(pd.DataFrame, bool)
     error = pyqtSignal(str)
-    category_needed = pyqtSignal(str, list, dict, str)  # merchant, choices, sample_data, progress_text
+    category_needed = pyqtSignal(str, list, dict, str, object)  # merchant, choices, sample_data, progress_text, suggested_category
     log_message = pyqtSignal(str, str)  # level, message
 
     def __init__(self, translations):
@@ -184,7 +209,18 @@ class ProcessThread(QThread):
         df['category'] = df['merchant'].map(lambda m: cat_mgr.category_map.get(m, [None, None])[0])
         df['subcat'] = df['merchant'].map(lambda m: cat_mgr.category_map.get(m, [None, None])[1])
 
-        unknown = [m for m in df['merchant'].unique() if m and m not in cat_mgr.category_map]
+        # Include merchants that are either:
+        # 1. Not in category_map at all, OR
+        # 2. Have the "_default" flag (need user confirmation)
+        unknown = [
+            m for m in df['merchant'].unique()
+            if m and (
+                m not in cat_mgr.category_map or
+                (isinstance(cat_mgr.category_map.get(m), list) and
+                 len(cat_mgr.category_map[m]) >= 3 and
+                 cat_mgr.category_map[m][2] == "_default")
+            )
+        ]
 
         flat_choices = [
             (cat, sub)
@@ -210,7 +246,7 @@ class ProcessThread(QThread):
                     sample_data['date'] = str(sample_row['transaction_date'])
 
             # Find similar merchant for suggestion
-            # suggested_category = cat_mgr.find_similar_merchant(merchant)
+            suggested_category = cat_mgr.find_similar_merchant(merchant)
 
             # Progress text
             progress_text = f"{idx} of {total_unknown} merchants remaining"
@@ -219,7 +255,7 @@ class ProcessThread(QThread):
             self.stop_timeout()
 
             # Signal to GUI that we need category selection
-            self.category_needed.emit(merchant, flat_choices, sample_data, progress_text)
+            self.category_needed.emit(merchant, flat_choices, sample_data, progress_text, suggested_category)
 
             # Wait for response
             while not self.response_ready:
@@ -608,7 +644,12 @@ class LogViewerHandler(logging.Handler, QObject):
     def emit(self, record: logging.LogRecord):
         try:
             msg = self.format(record)
-            self.log_signal.emit(record.levelname, msg)
+            # Check if the widget still exists before emitting
+            if hasattr(self, 'log_signal'):
+                self.log_signal.emit(record.levelname, msg)
+        except RuntimeError:
+            # Widget has been deleted, ignore
+            pass
         except Exception:
             self.handleError(record)
 
@@ -894,6 +935,108 @@ class ChartWidget(QWidget):
                 self.translations.get('chart_exported')
             )
 
+    def update_chart_by_subcategory(self, summary_df: pd.DataFrame, category: str,
+                                     full_summary_df: Optional[pd.DataFrame] = None,
+                                     show_all_callback: Optional[Callable] = None):
+        """
+        Update chart to show subcategories breakdown for a specific category.
+
+        Args:
+            summary_df: DataFrame filtered by category
+            category: Category name
+            full_summary_df: Optional full summary DataFrame for "Show All" functionality
+            show_all_callback: Optional callback function to call when "Show All" is clicked
+        """
+        try:
+            self.summary_df = summary_df
+            self.full_summary_df = full_summary_df if full_summary_df is not None else summary_df
+            self.on_show_all_callback = show_all_callback
+            self.figure.clear()
+
+            # Show "Show All" button
+            self.show_all_btn.setVisible(True)
+
+            if summary_df.empty:
+                ax = self.figure.add_subplot(111)
+                no_data_text = self.translations.get('no_data')
+                if self.translations.language == 'he':
+                    no_data_text = no_data_text[::-1]  # Reverse for RTL
+                ax.text(0.5, 0.5, no_data_text,
+                       ha='center', va='center', fontsize=14)
+                ax.axis('off')
+                self.canvas.draw()
+                return
+
+            # Group by subcategory and sum amounts
+            subcat_data = summary_df.groupby('subcat')['monthly_amount'].sum().sort_values(ascending=False)
+            
+            ax = self.figure.add_subplot(111)
+
+            # Get labels
+            breakdown_text = self.translations.get('subcategories_breakdown', default='פירוט תתי-קטגוריות')
+            
+            # For RTL languages (Hebrew)
+            if self.translations.language == 'he':
+                # Reverse Hebrew text for proper display
+                title = f"{category[::-1]} - {breakdown_text[::-1]}"
+                ylabel = self.translations.get('amount')[::-1]
+                
+                # Reverse data for RTL
+                subcats = list(reversed(subcat_data.index.tolist()))
+                # Reverse each subcategory name
+                subcats = [s[::-1] for s in subcats]
+                values = list(reversed(subcat_data.values.tolist()))
+                
+                # Create horizontal bar chart (better for Hebrew text)
+                bars = ax.barh(range(len(subcats)), values, color='#2E86AB')
+                ax.set_yticks(range(len(subcats)))
+                ax.set_yticklabels(subcats, fontsize=10)
+                ax.set_xlabel(ylabel, fontsize=12)
+                ax.set_title(title, fontsize=14, pad=20)
+                
+                # Add value labels on bars
+                for i, (bar, value) in enumerate(zip(bars, values)):
+                    ax.text(value, i, f' ₪{value:,.0f}', 
+                           va='center', ha='left', fontsize=9)
+                
+                ax.invert_yaxis()  # Highest value on top
+            else:
+                # LTR - vertical bar chart
+                title = f"{category} - {breakdown_text}"
+                ylabel = self.translations.get('amount')
+                
+                subcats = subcat_data.index.tolist()
+                values = subcat_data.values.tolist()
+                
+                bars = ax.bar(range(len(subcats)), values, color='#2E86AB')
+                ax.set_xticks(range(len(subcats)))
+                ax.set_xticklabels(subcats, rotation=45, ha='right', fontsize=10)
+                ax.set_ylabel(ylabel, fontsize=12)
+                ax.set_title(title, fontsize=14, pad=20)
+                
+                # Add value labels on top of bars
+                for bar, value in zip(bars, values):
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'₪{value:,.0f}',
+                           ha='center', va='bottom', fontsize=9)
+
+            ax.grid(axis='x' if self.translations.language == 'he' else 'y', 
+                   alpha=0.3, linestyle='--')
+            self.figure.tight_layout()
+            self.canvas.draw()
+
+        except Exception as e:
+            logger.error(f"Error updating subcategory chart: {e}")
+            ax = self.figure.add_subplot(111)
+            error_text = f'{self.translations.get("error_occurred")}: {str(e)}'
+            if self.translations.language == 'he':
+                error_text = error_text[::-1]  # Reverse for RTL
+            ax.text(0.5, 0.5, error_text,
+                   ha='center', va='center', fontsize=12, color='red')
+            ax.axis('off')
+            self.canvas.draw()
+
 
 class FileListWidget(QListWidget):
     """Custom list widget with drag-and-drop support."""
@@ -1028,7 +1171,18 @@ class CategoryManagementDialog(QDialog):
         """Populate table with current category mappings."""
         self.table.setRowCount(0)
 
-        for merchant, (category, subcat) in self.category_manager.category_map.items():
+        for merchant, mapping in self.category_manager.category_map.items():
+            # Skip invalid entries (empty merchant or invalid mapping format)
+            if not merchant or not mapping:
+                continue
+            
+            # Handle both list format [cat, sub] and any other format
+            if isinstance(mapping, (list, tuple)) and len(mapping) >= 2:
+                category, subcat = mapping[0], mapping[1]
+            else:
+                # Invalid format, skip
+                continue
+            
             row = self.table.rowCount()
             self.table.insertRow(row)
 
@@ -1125,8 +1279,7 @@ class CategoryManagementDialog(QDialog):
             del self.category_manager.category_map[merchant]
             self.category_manager.save_categories()
             self.populate_table()
-            QMessageBox.information(self, self.translations.get('success_title'),
-                                  f"Deleted mapping for {merchant}")
+
 
 
 class BudgetTrackerGUI(QMainWindow):
@@ -1242,6 +1395,8 @@ class BudgetTrackerGUI(QMainWindow):
         layout for Hebrew language. Loads dashboard data and performs startup validation.
         """
         self.setWindowTitle(self.translations.get('app_title'))
+        
+        # Set default window size
         self.resize(1200, 800)
 
         # Set RTL layout for Hebrew
@@ -1272,6 +1427,12 @@ class BudgetTrackerGUI(QMainWindow):
 
         main_layout.addLayout(header_layout)
 
+        # Dashboard last update info
+        self.dashboard_update_label = QLabel()
+        self.dashboard_update_label.setFont(QFont('Arial', 9))
+        self.dashboard_update_label.setStyleSheet("color: gray; padding: 5px;")
+        main_layout.addWidget(self.dashboard_update_label)
+
         # File management section
         file_group = QWidget()
         file_layout = QVBoxLayout()
@@ -1283,10 +1444,17 @@ class BudgetTrackerGUI(QMainWindow):
 
         self.file_list = FileListWidget()
         self.file_list.files_dropped.connect(self.import_dropped_files)
+        self.file_list.currentItemChanged.connect(self.show_file_preview)
         file_layout.addWidget(self.file_list)
 
         self.file_info_label = QLabel()
         file_layout.addWidget(self.file_info_label)
+
+        self.file_preview_label = QLabel()
+        self.file_preview_label.setFont(QFont('Arial', 9))
+        self.file_preview_label.setStyleSheet("color: #0066cc; padding: 3px;")
+        self.file_preview_label.setWordWrap(True)
+        file_layout.addWidget(self.file_preview_label)
 
         file_buttons = QHBoxLayout()
         import_btn = QPushButton(self.translations.get('import_files'))
@@ -1297,6 +1465,15 @@ class BudgetTrackerGUI(QMainWindow):
         refresh_all_btn.setFont(QFont('Arial', 10, QFont.Weight.Bold))
         refresh_all_btn.clicked.connect(self.refresh_all)
         file_buttons.addWidget(refresh_all_btn)
+
+        delete_btn = QPushButton(self.translations.get('delete_file'))
+        delete_btn.setStyleSheet("QPushButton { color: #cc0000; }")
+        delete_btn.clicked.connect(self.delete_selected_file)
+        file_buttons.addWidget(delete_btn)
+
+        open_folder_btn = QPushButton(self.translations.get('open_archive'))
+        open_folder_btn.clicked.connect(lambda: os.startfile(str(ARCHIVE_DIR)))
+        file_buttons.addWidget(open_folder_btn)
 
         file_layout.addLayout(file_buttons)
         main_layout.addWidget(file_group)
@@ -1440,27 +1617,73 @@ class BudgetTrackerGUI(QMainWindow):
             self.log_viewer.add_log('ERROR', f'Failed to validate template on startup: {str(e)}')
 
     def import_dropped_files(self, files: List[str]):
-        """Import files dropped via drag and drop."""
+        """Import files dropped via drag and drop with duplicate detection."""
         from src.validators import validate_excel_file, ValidationError
-        count, errors = 0, []
+        count, errors, duplicates = 0, [], []
 
         for file_path in files:
             try:
-                validate_excel_file(Path(file_path))
-                dest_path = TRANSACTIONS_DIR / Path(file_path).name
+                src = Path(file_path)
+                validate_excel_file(src)
+                
+                # Calculate hash
+                src_hash = calculate_file_hash(src)
+                if not src_hash:
+                    errors.append(f"{src.name}: Cannot read file")
+                    continue
+                
+                dest_path = TRANSACTIONS_DIR / src.name
+                
+                # Check for duplicate
+                if dest_path.exists():
+                    dst_hash = calculate_file_hash(dest_path)
+                    
+                    if src_hash == dst_hash:
+                        # Exact duplicate
+                        duplicates.append(f"✓ {src.name}")
+                        self.log_viewer.add_log('INFO', f'Duplicate skipped: {src.name}')
+                        continue
+                    else:
+                        # Different content - ask user
+                        reply = QMessageBox.question(
+                            self,
+                            self.translations.get('confirm_title'),
+                            f"הקובץ '{src.name}' כבר קיים אך התוכן שונה.\n\nהאם להחליף?" if self.translations.language == 'he' else
+                            f"File '{src.name}' exists with different content.\n\nReplace?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.No
+                        )
+                        
+                        if reply == QMessageBox.StandardButton.No:
+                            continue
+                        
+                        # Archive old file
+                        archive_name = f"{dest_path.stem}_{datetime.now():%Y%m%d_%H%M%S}{dest_path.suffix}"
+                        archive_dest = ARCHIVE_DIR / archive_name
+                        ensure_dirs([ARCHIVE_DIR])
+                        shutil.move(str(dest_path), str(archive_dest))
+                        self.log_viewer.add_log('INFO', f'Old file archived: {archive_name}')
+                
                 shutil.copy2(file_path, dest_path)
                 count += 1
-                self.log_viewer.add_log('INFO', f'Imported: {Path(file_path).name}')
+                self.log_viewer.add_log('INFO', f'Imported: {src.name}')
             except ValidationError as e:
                 errors.append(f"{Path(file_path).name}: {e}")
                 self.log_viewer.add_log('ERROR', f'Skipped - {errors[-1]}')
 
         self.refresh_files()
-        if count > 0:
-            msg = self.translations.get('files_imported', count=count)
-            QMessageBox.information(self, self.translations.get('success_title'), msg)
+        
+        # Show results
+        if count > 0 or duplicates:
+            msg_parts = []
+            if count > 0:
+                msg_parts.append(self.translations.get('files_imported', count=count))
+            if duplicates:
+                dup_text = "קבצים כפולים" if self.translations.language == 'he' else "Duplicates skipped"
+                msg_parts.append(f"\n{dup_text}: {len(duplicates)}")
+            QMessageBox.information(self, self.translations.get('success_title'), "\n".join(msg_parts))
         if errors:
-            QMessageBox.warning(self, "Import Errors", "\\n".join(errors[:5]))
+            QMessageBox.warning(self, "Import Errors", "\n".join(errors[:5]))
 
     def load_dashboard_data(self):
         """
@@ -1582,10 +1805,16 @@ class BudgetTrackerGUI(QMainWindow):
                                                  f"{self.translations.get('table_tab')} ({year_str})")
 
                     self.log_viewer.add_log('INFO', 'Dashboard data loaded successfully')
+                    
+                    # Update dashboard info label
+                    self.update_dashboard_info_label()
                 else:
                     self.log_viewer.add_log('INFO', f'No data found for current year ({current_year})')
             else:
                 self.log_viewer.add_log('INFO', 'No data found in dashboard')
+            
+            # Update dashboard info label even if no data
+            self.update_dashboard_info_label()
 
         except FileNotFoundError as e:
             error_msg = get_user_friendly_error(e)
@@ -1618,6 +1847,107 @@ class BudgetTrackerGUI(QMainWindow):
         self.__init__(new_lang)
         self.show()
 
+    def get_dashboard_last_modified_text(self) -> str:
+        """Get dashboard last modified time as user-friendly text."""
+        if not DASHBOARD_FILE_PATH.exists():
+            return self.translations.get('no_dashboard', 'אין דשבורד' if self.translations.language == 'he' else 'No dashboard')
+        
+        try:
+            last_modified = datetime.fromtimestamp(DASHBOARD_FILE_PATH.stat().st_mtime)
+            now = datetime.now()
+            time_diff = now - last_modified
+            
+            # Format time ago
+            if time_diff.days == 0:
+                if time_diff.seconds < 60:
+                    time_ago = 'ממש עכשיו' if self.translations.language == 'he' else 'just now'
+                elif time_diff.seconds < 3600:
+                    mins = time_diff.seconds // 60
+                    time_ago = f'לפני {mins} דקות' if self.translations.language == 'he' else f'{mins} minutes ago'
+                else:
+                    hours = time_diff.seconds // 3600
+                    time_ago = f'לפני {hours} שעות' if self.translations.language == 'he' else f'{hours} hours ago'
+            elif time_diff.days == 1:
+                time_ago = 'אתמול' if self.translations.language == 'he' else 'yesterday'
+            elif time_diff.days < 7:
+                time_ago = f'לפני {time_diff.days} ימים' if self.translations.language == 'he' else f'{time_diff.days} days ago'
+            elif time_diff.days < 30:
+                weeks = time_diff.days // 7
+                time_ago = f'לפני {weeks} שבועות' if self.translations.language == 'he' else f'{weeks} weeks ago'
+            else:
+                months = time_diff.days // 30
+                time_ago = f'לפני {months} חודשים' if self.translations.language == 'he' else f'{months} months ago'
+            
+            date_str = last_modified.strftime('%d/%m/%Y %H:%M')
+            
+            if self.translations.language == 'he':
+                return f"📅 דשבורד עודכן: {date_str} ({time_ago})"
+            else:
+                return f"📅 Dashboard updated: {date_str} ({time_ago})"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def update_dashboard_info_label(self):
+        """Update dashboard last modified label."""
+        if hasattr(self, 'dashboard_update_label'):
+            text = self.get_dashboard_last_modified_text()
+            self.dashboard_update_label.setText(text)
+
+    def show_file_preview(self, current_item, previous_item):
+        """
+        Show preview information for selected file.
+        
+        Args:
+            current_item: Currently selected list item
+            previous_item: Previously selected list item
+        """
+        if not current_item:
+            self.file_preview_label.setText("")
+            return
+        
+        filename = current_item.text()
+        file_path = TRANSACTIONS_DIR / filename
+        
+        if not file_path.exists():
+            self.file_preview_label.setText("")
+            return
+        
+        try:
+            # Try to read and normalize the file
+            df = pd.read_excel(file_path)
+            normalizer = Normalizer()
+            df = normalizer.normalize(df)
+            
+            # Calculate statistics
+            count = len(df)
+            total = df['amount'].sum()
+            
+            # Get date range
+            if 'transaction_date' in df.columns and not df.empty:
+                min_date = df['transaction_date'].min()
+                max_date = df['transaction_date'].max()
+                if pd.notna(min_date) and pd.notna(max_date):
+                    date_range = f"{min_date:%m/%Y} - {max_date:%m/%Y}"
+                else:
+                    date_range = "תאריכים לא תקינים" if self.translations.language == 'he' else "Invalid dates"
+            else:
+                date_range = "אין תאריכים" if self.translations.language == 'he' else "No dates"
+            
+            # Format preview text
+            if self.translations.language == 'he':
+                preview_text = f"📊 {count} עסקאות | 📅 {date_range} | 💰 ₪{total:,.2f}"
+            else:
+                preview_text = f"📊 {count} transactions | 📅 {date_range} | 💰 ₪{total:,.2f}"
+            
+            self.file_preview_label.setText(preview_text)
+            self.file_preview_label.setStyleSheet("color: #0066cc; padding: 3px;")
+            
+        except Exception as e:
+            # Show error message
+            error_text = f"⚠️ {self.translations.get('error_occurred', error=str(e)[:50])}"
+            self.file_preview_label.setText(error_text)
+            self.file_preview_label.setStyleSheet("color: #cc0000; padding: 3px;")
+
     def refresh_files(self):
         """
         Refresh the transaction files list.
@@ -1642,6 +1972,54 @@ class BudgetTrackerGUI(QMainWindow):
             f"{self.translations.get('files_count', count=len(files))} | "
             f"{self.translations.get('total_size', size=f'{size_mb:.2f} MB')}"
         )
+
+    def delete_selected_file(self):
+        """Delete selected transaction file with confirmation."""
+        selected_item = self.file_list.currentItem()
+        if not selected_item:
+            QMessageBox.warning(
+                self,
+                self.translations.get('warning_title'),
+                self.translations.get('select_file_to_delete')
+            )
+            return
+        
+        filename = selected_item.text()
+        file_path = TRANSACTIONS_DIR / filename
+        
+        # Confirmation dialog
+        reply = QMessageBox.question(
+            self,
+            self.translations.get('confirm_title'),
+            f"{self.translations.get('delete_file_confirm')} '{filename}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    self.log_viewer.add_log('INFO', f'File deleted: {filename}')
+                    self.refresh_files()
+                    # Show brief status message instead of popup
+                    self.statusBar().showMessage(
+                        f"✓ {self.translations.get('file_deleted')}: {filename}",
+                        5000  # Show for 5 seconds
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        self.translations.get('warning_title'),
+                        self.translations.get('error_occurred', error='File not found')
+                    )
+            except Exception as e:
+                self.log_viewer.add_log('ERROR', f'Failed to delete file: {str(e)}')
+                QMessageBox.critical(
+                    self,
+                    self.translations.get('error_title'),
+                    self.translations.get('error_occurred', error=str(e))
+                )
 
     def refresh_archive(self):
         """
@@ -1679,12 +2057,13 @@ class BudgetTrackerGUI(QMainWindow):
 
     def import_files(self):
         """
-        Import Excel files via file dialog.
+        Import Excel files via file dialog with duplicate detection.
 
         Opens a file selection dialog allowing user to choose one or more Excel files.
         Copies selected files to the transactions directory and refreshes the file list.
         Shows success message with count of imported files.
         Validates files before importing and provides user-friendly error messages.
+        Uses SHA256 hash to detect duplicate files.
         """
         files, _ = QFileDialog.getOpenFileNames(
             self,
@@ -1698,6 +2077,8 @@ class BudgetTrackerGUI(QMainWindow):
 
         count = 0
         errors = []
+        duplicates = []
+        
         for file_path in files:
             try:
                 src = Path(file_path)
@@ -1705,6 +2086,12 @@ class BudgetTrackerGUI(QMainWindow):
                 # Check if source file exists
                 if not src.exists():
                     errors.append(f"{src.name}: File not found")
+                    continue
+
+                # Calculate hash of source file
+                src_hash = calculate_file_hash(src)
+                if not src_hash:
+                    errors.append(f"{src.name}: Cannot read file")
                     continue
 
                 # Check file permissions
@@ -1719,6 +2106,40 @@ class BudgetTrackerGUI(QMainWindow):
                     continue
 
                 dst = TRANSACTIONS_DIR / src.name
+
+                # Check for duplicate by hash
+                if dst.exists():
+                    dst_hash = calculate_file_hash(dst)
+                    
+                    if src_hash == dst_hash:
+                        # Exact duplicate (same content)
+                        duplicates.append(f"✓ {src.name}")
+                        self.log_viewer.add_log('INFO', f'Duplicate file skipped: {src.name} (identical content)')
+                        continue
+                    else:
+                        # Same name, different content - ask user
+                        reply = QMessageBox.question(
+                            self,
+                            self.translations.get('confirm_title'),
+                            f"הקובץ '{src.name}' כבר קיים אך התוכן שונה.\n\n"
+                            f"האם להחליף את הקובץ הקיים?\n\n"
+                            f"(הקובץ הישן יועבר לארכיון)" if self.translations.language == 'he' else
+                            f"File '{src.name}' already exists with different content.\n\n"
+                            f"Replace existing file?\n\n"
+                            f"(Old file will be moved to archive)",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.No
+                        )
+                        
+                        if reply == QMessageBox.StandardButton.No:
+                            continue
+                        
+                        # Move old file to archive
+                        archive_name = f"{dst.stem}_{datetime.now():%Y%m%d_%H%M%S}{dst.suffix}"
+                        archive_dest = ARCHIVE_DIR / archive_name
+                        ensure_dirs([ARCHIVE_DIR])
+                        shutil.move(str(dst), str(archive_dest))
+                        self.log_viewer.add_log('INFO', f'Old file archived: {archive_name}')
 
                 # Check if destination file is locked
                 if dst.exists() and is_file_locked(dst):
@@ -1744,11 +2165,21 @@ class BudgetTrackerGUI(QMainWindow):
 
         self.refresh_files()
 
-        if count > 0:
+        # Show success message
+        if count > 0 or duplicates:
+            msg_parts = []
+            if count > 0:
+                msg_parts.append(self.translations.get('files_imported', count=count))
+            if duplicates:
+                dup_text = "קבצים כפולים שדולגו" if self.translations.language == 'he' else "Duplicate files skipped"
+                msg_parts.append(f"\n{dup_text}: {len(duplicates)}\n" + "\n".join(duplicates[:5]))
+                if len(duplicates) > 5:
+                    msg_parts.append(f"... +{len(duplicates) - 5} more")
+            
             QMessageBox.information(
                 self,
                 self.translations.get('success_title'),
-                self.translations.get('files_imported', count=count)
+                "\n".join(msg_parts)
             )
 
         if errors:
@@ -1813,7 +2244,7 @@ class BudgetTrackerGUI(QMainWindow):
         dialog.exec()
         return dialog.decision
 
-    def show_category_dialog(self, merchant: str, choices: List[tuple], sample_data: dict, progress_text: str):
+    def show_category_dialog(self, merchant: str, choices: List[tuple], sample_data: dict, progress_text: str, suggested_category: Optional[Tuple[str, str]]):
         """
         Show dialog for category selection.
 
@@ -1825,12 +2256,8 @@ class BudgetTrackerGUI(QMainWindow):
             choices: List of (category, subcategory) tuples to choose from
             sample_data: Dict with sample transaction info (amount, date)
             progress_text: Progress text like "3 of 15 merchants remaining"
+            suggested_category: Optional suggested category from similar merchants
         """
-        # Get category manager to find similar merchant
-        from src.category_manager import CategoryManager
-        cat_mgr = CategoryManager(CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH)
-        suggested_category = cat_mgr.find_similar_merchant(merchant)
-
         dialog = CategoryDialog(
             merchant,
             choices,
@@ -1903,6 +2330,9 @@ class BudgetTrackerGUI(QMainWindow):
                     writer = DashboardWriter(DASHBOARD_FILE_PATH)
                     writer.update(summary_df, conflict_resolver=self.resolve_conflict)
                     self.log_viewer.add_log('INFO', 'Dashboard updated successfully')
+                    
+                    # Update dashboard info label after write
+                    self.update_dashboard_info_label()
             except (PermissionError, IOError, OSError) as e:
                 error_msg = get_user_friendly_error(e)
                 self.log_viewer.add_log('ERROR', f'Failed to write dashboard: {str(e)}')
@@ -2012,13 +2442,8 @@ class BudgetTrackerGUI(QMainWindow):
             self.preview_table.itemClicked.disconnect(self.on_category_row_clicked)
         except TypeError:
             pass
-        try:
-            self.preview_table.itemSelectionChanged.disconnect(self.on_category_selection_changed)
-        except TypeError:
-            pass
 
         self.preview_table.itemClicked.connect(self.on_category_row_clicked)
-        self.preview_table.itemSelectionChanged.connect(self.on_category_selection_changed)
 
         headers = [
             self.translations.get('category'),
@@ -2087,18 +2512,6 @@ class BudgetTrackerGUI(QMainWindow):
             f"Total: ₪{grand_total:,.2f} | {len(category_summary)} categories"
         )
 
-    def on_category_selection_changed(self):
-        """Handle selection changes to drive chart updates."""
-        selection_model = self.preview_table.selectionModel()
-        if not selection_model:
-            return
-
-        selected_rows = selection_model.selectedRows()
-        if not selected_rows:
-            return
-
-        self._handle_category_selection(selected_rows[0].row())
-
     def on_category_row_clicked(self, item: QTableWidgetItem):
         """
         Handle click on category table row to filter chart.
@@ -2142,12 +2555,12 @@ class BudgetTrackerGUI(QMainWindow):
             self.statusBar().showMessage(self.translations.get('showing_all_categories') or "Showing all categories")
             self.preview_tabs.setCurrentWidget(self.chart_widget)
         else:
-            # Filter by category - show monthly breakdown
+            # Filter by category - show subcategories breakdown
             self.current_category_filter = category
             filtered_df = self.last_summary_df[self.last_summary_df['category'] == category]
-            self.chart_widget.update_chart(
+            self.chart_widget.update_chart_by_subcategory(
                 filtered_df,
-                category_filter=category,
+                category=category,
                 full_summary_df=self.last_summary_df,
                 show_all_callback=self.show_all_categories
             )
@@ -2229,6 +2642,25 @@ class BudgetTrackerGUI(QMainWindow):
                 self.translations.get('warning_title'),
                 self.translations.get('error_occurred', error='Dashboard file not found')
             )
+    
+    def closeEvent(self, event):
+        """
+        Handle window close event.
+        
+        Saves window geometry to settings before closing.
+        
+        Args:
+            event: QCloseEvent
+        """
+        # Remove log handler to prevent shutdown errors
+        if hasattr(self, '_log_viewer_handler'):
+            try:
+                logging.getLogger().removeHandler(self._log_viewer_handler)
+                self._log_viewer_handler.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+        
+        event.accept()
 def main():
     """
     Main entry point for GUI application.

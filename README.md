@@ -1,37 +1,3 @@
-====================================================================================
-Improvements [New Version Tag]
-
-- **GUI Enhancements**
-- **Category Management**: Dialog to view, edit, and delete category
-mappings with search/filter
-- **Interactive Table Filtering**: Click category rows to filter
-charts by category/subcategory
-- **Undo/Redo**: History stack for category mapping changes (Ctrl+Z,
-Ctrl+Y)
-- **Keyboard Navigation**: Shortcuts (Ctrl+F, Esc, Enter) and
-improved tab navigation
-- **Visual Feedback**: Progress indicators, status messages with
-icons, tooltips, loading spinners
-
-- **Security & Data Integrity**
-- **Input Sanitization**: Enhanced validation to prevent directory
-traversal attacks
-- **Transaction Validation**: Structure, duplicate, and date range
-validation before dashboard write
-- **Error Handling**: File lock detection, dashboard corruption
-handling, user-friendly messages
-
-- **Code Quality**
-- **Test Coverage**: Comprehensive unit tests for GUI components
-(dialogs, widgets, threading)
-    - **Documentation**: Docstrings added to all GUI methods
-    - **Structured Logging**: Key-value logging with log rotation
-
-- **Deployment**
-- **Executable Creation**: PyInstaller bundling via
-`setup_deployment.bat`
-====================================================================================
-
 # Budget Tracker
 
 **Budget Tracker** is a Python-based tool for processing, categorizing, and summarizing monthly financial transactions from Excel files.
@@ -39,12 +5,39 @@ It supports Hebrew-language inputs and outputs a categorized summary into a pre-
 
 ## Features
 
-- **GUI Interface**: Easy-to-use graphical interface for importing and managing files.
-- **Automated Processing**: Load and normalize Excel transaction files (`.xlsx`, `.xls`).
-- **Smart Categorization**: Map merchants to user-defined budget categories and subcategories.
-- **Dashboard Integration**: Output categorized monthly summaries into an existing formatted dashboard.
-- **Backups**: Automatic backups of your dashboard, archived transaction files and temporary location for processing files.
-- **Hebrew Support**: Built-in support for Hebrew text and date formats.
+### Core Features
+- **Modern GUI Interface**: Easy-to-use graphical interface with Hebrew/English support
+- **Automated Processing**: Load and normalize Excel transaction files (`.xlsx`, `.xls`)
+- **Smart Categorization**: Map merchants to user-defined budget categories and subcategories
+- **Dashboard Integration**: Output categorized monthly summaries into an existing formatted dashboard
+- **Backups**: Automatic backups of your dashboard, archived transaction files
+- **Hebrew Support**: Built-in RTL support for Hebrew text and date formats
+
+### File Management
+- **Drag & Drop**: Import files by dragging them into the window
+- **Duplicate Detection**: SHA256 hash-based detection prevents duplicate imports
+- **File Preview**: See transaction count, date range, and total when selecting a file
+- **Quick Delete**: Remove files with confirmation dialog
+- **Folder Access**: One-click button to open archive folder
+
+### Reporting & Export
+- **Excel Dashboard**: Automatic updates with conflict resolution
+- **Interactive Charts**: Click categories to filter and drill down
+
+### User Experience
+- **Dashboard Status**: Shows last update time ("2 hours ago", "yesterday")
+- **Category Management**: Search, edit, and delete merchant mappings
+- **Keyboard Shortcuts**: F5 (refresh), Ctrl+O (open dashboard), Ctrl+P (process), and more
+
+## Screenshots
+
+### Main Interface
+![Main Window](docs/images/main-window.png)
+*The main application window showing file list, dashboard summary table, and monthly expense chart*
+
+### Category Management Dialog
+![Category Management](docs/images/category-management.png)
+*Search, edit, and manage merchant-to-category mappings*
 
 ## Folder Structure
 
@@ -58,19 +51,31 @@ The application organizes your data in the `UserFiles` directory:
 ### GUI Mode (Recommended)
 1. Run the application:
    ```bash
-   python main.py --gui
-   ```
-2. **Import Files**: Drag & drop Excel files or use the "Import Files" button.
-3. **Categorize**: The app will prompt you to map any new merchants.
-4. **Update**: Review the summary and update your dashboard.
-
-### CLI Mode
-1. Place transaction files in `UserFiles/backups/`.
-2. Run the script:
-   ```bash
    python main.py
    ```
-3. Follow the interactive prompts in the terminal.
+   *(GUI starts by default)*
+
+2. **Import Files**: 
+   - Drag & drop Excel files into the window, OR
+   - Click "Import Files" button to browse
+   
+3. **Preview Files**: Click on a file to see transaction count, dates, and total
+
+4. **Process**: Click "Process Transactions" to start
+
+5. **Categorize**: Map any new merchants to categories when prompted
+
+6. **Review**: Check the summary table and charts
+
+7. **Export**: Data is automatically saved to the dashboard. Click "Open Dashboard" to view in Excel.
+
+### CLI Mode
+1. Place transaction files in `UserFiles/backups/`
+2. Run the script:
+   ```bash
+   python main.py --cli
+   ```
+3. Follow the interactive prompts in the terminal
 
 ## Setup
 
@@ -92,19 +97,19 @@ The **Template sheet** in `UserFiles/dashboard.xlsx` is the foundation of your B
 
 ### Expected User Behavior
 
-#### ✅ Adding Categories or Subcategories
+#### Adding Categories or Subcategories
 When you add new categories or subcategories to the Template sheet:
 - **No action required** - changes are detected automatically on the next run
 - New options will appear in the category selection menu
 - Missing rows will be automatically added to existing year sheets
 
-#### ⚠️ Removing Categories or Subcategories
+#### Removing Categories or Subcategories
 When you remove categories or subcategories from the Template sheet:
 - **User intervention required** - the application detects conflicts with existing data
 - You'll be prompted to remap any merchants that were previously assigned to the removed category
 - Historical data is preserved; you simply reassign it to a valid category
 
-#### 🔄 Reordering Rows
+#### Reordering Rows
 - **Completely safe** - the application uses category names, not row positions
 - Reorder categories for better visual organization without affecting functionality
 
@@ -113,43 +118,70 @@ When you remove categories or subcategories from the Template sheet:
 ```mermaid
 graph TD
     A[Application Starts] --> B[Load Template Sheet]
-    B --> C{Template Exists?}
-    C -->|No| D[Error: Missing Template]
+    B --> C{Template Sheet Present?}
+    C -->|No| D[Show Error: Missing Template]
     C -->|Yes| E[Parse Categories/Subcategories]
-    E --> F[Store Valid Category Structure]
+    E --> F[Cache Valid Category Structure]
 
-    G[Process Transactions] --> H[Map Merchants to Categories]
+    G[Import/Process Transactions] --> H[Map Merchants to Categories]
     H --> I{Category Exists in Template?}
-    I -->|Yes| J[Use Existing Category]
-    I -->|No| K[Prompt User to Select]
+    I -->|Yes| J[Assign Existing Category]
+    I -->|No| K[Prompt User for Mapping]
     K --> L{User Selects Valid Category?}
     L -->|Yes| M[Save Mapping]
+    L -->|No| N[Abort/Retry Mapping]
 
-    N[Write to Dashboard] --> O{Year Sheet Exists?}
-    O -->|No| P[Clone Template Sheet]
-    O -->|Yes| Q[Update Existing Sheet]
-    P --> Q
-    Q --> R{New Category in Data?}
-    R -->|Yes| S[Add Row to Sheet]
-    R -->|No| T[Write to Existing Row]
+    O[Write Results to Dashboard] --> P{Year Sheet Exists?}
+    P -->|No| Q[Clone Template Sheet to New Year]
+    P -->|Yes| R[Update Year Sheet]
+    Q --> R
+    R --> S{New Category Needed in Sheet?}
+    S -->|Yes| T[Add Row for Category]
+    S -->|No| U[Update Existing Row]
 
-    U[Template Changed] --> V{Added or Removed?}
-    V -->|Added Categories| W[Next Run: New Options Available]
-    V -->|Removed Categories| X[Next Run: Prompt for Remapping]
+    V[Detect Template Sheet Change] --> W{Categories Added/Removed?}
+    W -->|Added| X[Sync: Add to Year Sheets Next Run]
+    W -->|Removed| Y[Prompt User to Remap]
 ```
 
-**Important**: Never delete the Template sheet or rename it unless you also update the configuration in `code/config.py`.
+_Note: This diagram reflects the up-to-date workflow, including mapping, dashboard updates, template monitoring, and category remapping prompts in response to template changes._
 
-## Upcoming Features
+**Important**: Never delete the Template sheet or rename it unless you also update the configuration in `src/config.py`.
+
+====================================================================================
+## Recent Changes [v2.0] - 2026-01-30
+
+- **Daily Use Improvements**
+  - Delete files with confirmation dialog
+  - Duplicate file detection using SHA256 hash
+  - Dashboard last modified timestamp display with friendly format
+  - Quick archive folder access button
+  - File preview showing transaction count, date range, and total
+  - Interactive chart filtering (click category to see subcategories)
 
 - **GUI Enhancements**
-    - **History View**: Add a tab to view a log of past imports and archived files
-    - **Advanced Charts**: Add interactive pie charts and trend lines to the dashboard view
-    - **Budget Goals**: Set monthly limits per category and track progress
+  - Category Management dialog with search and filtering
+  - Interactive table filtering by clicking category rows
+  - Keyboard shortcuts (Ctrl+F, Esc, Enter, F5, Ctrl+O, Ctrl+P)
+  - Visual feedback with progress indicators and status messages
 
-- **Reporting & Export**
-    - **PDF Reports**: Generate a printable monthly summary PDF
-    - **CSV Export**: Option to export the processed data to a clean CSV file
+- **Security & Data Integrity**
+  - Input sanitization to prevent directory traversal attacks
+  - Transaction validation (structure, duplicates, date ranges)
+  - File lock detection and corruption handling
+  - User-friendly error messages
+
+- **Code Quality**
+  - Comprehensive unit tests for GUI components
+  - Complete docstrings for all methods
+  - Structured logging with log rotation
+====================================================================================
+
+### Coming Soon
+
+- **Budget Goals**: Set monthly limits per category and track progress
+- **History View**: Log of all imports and processing operations
+- **Advanced Charts**: Interactive pie charts and trend analysis
 
 ## License
 This project is private and not intended for redistribution.
