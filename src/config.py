@@ -14,15 +14,16 @@ else:
 USER_FILES_DIR = BASE_DIR / 'UserFiles'
 
 # Subdirectories
-OUTPUT_DIR = BASE_DIR / 'output'
+APPDATA_DIR = BASE_DIR / 'appdata'
 BACKUPS_ROOT = USER_FILES_DIR / 'backups'
 TRANSACTIONS_DIR = BACKUPS_ROOT
-ARCHIVE_DIR = BACKUPS_ROOT / 'archive'
-DASHBOARD_BACKUP_DIR = BACKUPS_ROOT / 'dashboard'
+ARCHIVE_DIR = BACKUPS_ROOT / 'transactions'
+DASHBOARD_BACKUP_DIR = BACKUPS_ROOT / 'dashboards'
 
 # Files
 CATEGORIES_FILE_PATH = USER_FILES_DIR / 'categories.json'
 DASHBOARD_FILE_PATH = USER_FILES_DIR / 'dashboard.xlsx'
+PROCESSED_HASHES_PATH = APPDATA_DIR / 'processed_hashes.json'
 
 LOG_FILE_NAME = 'budget.log'
 TEMPLATE_SHEET_NAME = "Template"
@@ -53,6 +54,17 @@ def get_log_level() -> int:
         Logging level constant (e.g., logging.DEBUG)
     """
     return LOG_SEVERITY
+
+
+def set_log_level(level_name: str) -> None:
+    """
+    Set the log level from a string name.
+
+    Args:
+        level_name: Log level name (e.g., 'DEBUG', 'INFO')
+    """
+    global LOG_SEVERITY
+    LOG_SEVERITY = LOG_LEVEL_MAP.get(level_name, logging.DEBUG)
 
 
 def get_log_level_name() -> str:

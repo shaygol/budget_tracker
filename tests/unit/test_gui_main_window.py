@@ -18,7 +18,7 @@ def gui_window(qapp, tmp_path, monkeypatch):
     # Patch config paths to use temp directory
     monkeypatch.setattr('src.config.TRANSACTIONS_DIR', tmp_path / 'transactions')
     monkeypatch.setattr('src.config.DASHBOARD_FILE_PATH', tmp_path / 'dashboard.xlsx')
-    monkeypatch.setattr('src.config.OUTPUT_DIR', tmp_path / 'output')
+    monkeypatch.setattr('src.config.APPDATA_DIR', tmp_path / 'appdata')
     monkeypatch.setattr('src.config.ARCHIVE_DIR', tmp_path / 'archive')
     monkeypatch.setattr('src.config.CATEGORIES_FILE_PATH', tmp_path / 'categories.json')
 

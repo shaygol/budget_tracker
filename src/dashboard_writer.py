@@ -153,10 +153,10 @@ class DashboardWriter:
         if not invalid_months.empty:
             errors.append(f"Invalid month values found: {invalid_months['month'].unique().tolist()}")
 
-        # Validate amounts are not negative (warn but don't fail)
+        # Warn about negative amounts (e.g. refunds) but don't fail validation
         negative_amounts = summary_df[summary_df['monthly_amount'] < 0]
         if not negative_amounts.empty:
-            errors.append(f"Warning: Found {len(negative_amounts)} transaction(s) with negative amounts")
+            logger.warning(f"Found {len(negative_amounts)} transaction(s) with negative amounts (possibly refunds)")
 
         is_valid = len(errors) == 0
         return is_valid, errors
@@ -305,6 +305,7 @@ class DashboardWriter:
         for col in range(3, 15):
             ws.cell(row=insert_at, column=col, value="")
         # Re-merge the category header cell to extend one more row
-        ws.unmerge_cells(start_row=start, end_row=end, start_column=1, end_column=1)
+        if start < end:
+            ws.unmerge_cells(start_row=start, end_row=end, start_column=1, end_column=1)
         ws.merge_cells(start_row=start, end_row=end + 1, start_column=1, end_column=1)
         cat_ranges[category] = (start, end + 1)

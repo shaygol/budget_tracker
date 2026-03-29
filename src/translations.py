@@ -53,6 +53,9 @@ class Translations:
         'top_category_label': 'קטגוריה מובילה',
         'not_available': 'לא זמין',
 
+        'all_years': 'כל השנים',
+        'select_year': 'בחר שנה:',
+
         # Archive section
         'archive': 'ארכיון',
         'clear_archive': 'נקה ארכיון',
@@ -97,6 +100,9 @@ class Translations:
         'select_file_to_delete': 'אנא בחר קובץ למחיקה',
         'open_archive': '📦 פתח ארכיון',
         
+        'already_processed_title': 'קבצים שכבר עובדו',
+        'already_processed_msg': 'הקבצים הבאים כבר עובדו בעבר:\n\n{files}\n\nהאם להמשיך בעיבוד בכל זאת?',
+
         # Messages
         'no_files': 'לא נמצאו קבצי עסקאות',
         'select_files': 'בחר קבצי Excel',
@@ -179,6 +185,9 @@ class Translations:
         'vs_average': 'vs Avg',
         'not_available': 'N/A',
 
+        'all_years': 'All Years',
+        'select_year': 'Select Year:',
+
         # Archive section
         'archive': 'Archive',
         'clear_archive': 'Clear Archive',
@@ -234,6 +243,9 @@ class Translations:
         'select_file_to_delete': 'Please select a file to delete',
         'open_archive': '📦 Open Archive',
         
+        'already_processed_title': 'Already Processed Files',
+        'already_processed_msg': 'The following files have already been processed:\n\n{files}\n\nDo you want to process them again?',
+
         # Messages
         'no_files': 'No transaction files found',
         'select_files': 'Select Excel Files',

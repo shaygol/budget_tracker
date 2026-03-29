@@ -104,10 +104,10 @@ class Normalizer:
                                     for field in missing])
 
             raise ValueError(
-                f"Missing Required Columns in Excel File\\n"
-                f"\\nThe following required columns were not found: {missing_list}\\n"
-                f"\\nExpected column names:\\n{suggestions}\\n"
-                f"\\nPlease ensure your Excel file has the correct column headers.\\n"
+                f"Missing Required Columns in Excel File\n"
+                f"\nThe following required columns were not found: {missing_list}\n"
+                f"\nExpected column names:\n{suggestions}\n"
+                f"\nPlease ensure your Excel file has the correct column headers.\n"
                 f"Available columns in file: {', '.join(df.columns)}"
             )
 

@@ -105,8 +105,8 @@ def setup_error_reporting(error_dir: Optional[Path] = None) -> ErrorReporter:
         ErrorReporter instance
     """
     if error_dir is None:
-        from src.config import OUTPUT_DIR
-        error_dir = OUTPUT_DIR / 'errors'
+        from src.config import APPDATA_DIR
+        error_dir = APPDATA_DIR / 'errors'
 
     reporter = ErrorReporter(error_dir)
 

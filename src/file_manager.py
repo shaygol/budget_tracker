@@ -1,11 +1,14 @@
 import os
+import json
+import hashlib
 from pathlib import Path
 from zipfile import BadZipFile
+from datetime import datetime
 from openpyxl import load_workbook
 import pandas as pd
 import logging
-from typing import List, Optional
-from src.config import SUPPORTED_EXTENSIONS, ARCHIVE_DIR, TRANSACTIONS_DIR, FILE_HEADER_KEYWORDS
+from typing import List, Optional, Dict
+from src.config import SUPPORTED_EXTENSIONS, ARCHIVE_DIR, TRANSACTIONS_DIR, FILE_HEADER_KEYWORDS, PROCESSED_HASHES_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +62,12 @@ def _load_transaction_file(file_path: Path) -> Optional[pd.DataFrame]:
         header_idx = _detect_header_row(raw)
         if header_idx is None:
             raise ValueError(
-                f"Invalid Transaction File: Could not find the header row in '{file_path.name}'.\\n"
-                f"\\nThe file must contain column headers with at least:\\n"
-                f"  - תאריך (Date)\\n"
-                f"  - שם בית העסק (Merchant)\\n"
-                f"  - סכום (Amount)\\n"
-                f"\\nPlease verify this is a valid credit card transaction export file."
+                f"Invalid Transaction File: Could not find the header row in '{file_path.name}'.\n"
+                f"\nThe file must contain column headers with at least:\n"
+                f"  - תאריך (Date)\n"
+                f"  - שם בית העסק (Merchant)\n"
+                f"  - סכום (Amount)\n"
+                f"\nPlease verify this is a valid credit card transaction export file."
             )
         df = pd.read_excel(file_path, header=header_idx, engine='openpyxl')
         df['source_file'] = file_path.name
@@ -126,3 +129,68 @@ def archive_files(file_name: Optional[str] = None) -> None:
             except PermissionError:
                 logger.error(f"PermissionError: '{file_name}' is open")
                 print(f"\nCan't archive file '{file_name}' since it's still open\n")
+
+
+def _compute_file_hash(file_path: Path, chunk_size: int = 8192) -> Optional[str]:
+    """Compute SHA-256 hash of a file."""
+    sha256 = hashlib.sha256()
+    try:
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(chunk_size), b""):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to hash {file_path}: {e}")
+        return None
+
+
+def _load_processed_hashes() -> Dict:
+    """Load the processed file hashes registry."""
+    if PROCESSED_HASHES_PATH.exists():
+        try:
+            with open(PROCESSED_HASHES_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Failed to load processed hashes: {e}")
+    return {}
+
+
+def _save_processed_hashes(hashes: Dict) -> None:
+    """Save the processed file hashes registry."""
+    try:
+        PROCESSED_HASHES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(PROCESSED_HASHES_PATH, 'w', encoding='utf-8') as f:
+            json.dump(hashes, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        logger.error(f"Failed to save processed hashes: {e}")
+
+
+def check_already_processed(file_paths: List[Path]) -> List[tuple]:
+    """
+    Check which files have already been processed based on content hash.
+
+    Returns:
+        List of (file_path, original_filename, processed_date) for already-processed files
+    """
+    hashes = _load_processed_hashes()
+    already_processed = []
+    for fp in file_paths:
+        file_hash = _compute_file_hash(fp)
+        if file_hash and file_hash in hashes:
+            entry = hashes[file_hash]
+            already_processed.append((fp, entry.get('filename', '?'), entry.get('date', '?')))
+    return already_processed
+
+
+def mark_files_as_processed(file_paths: List[Path]) -> None:
+    """Record file hashes after successful processing."""
+    hashes = _load_processed_hashes()
+    for fp in file_paths:
+        file_hash = _compute_file_hash(fp)
+        if file_hash:
+            hashes[file_hash] = {
+                'filename': fp.name,
+                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+    _save_processed_hashes(hashes)
+    logger.info(f"Recorded {len(file_paths)} processed file hash(es)")

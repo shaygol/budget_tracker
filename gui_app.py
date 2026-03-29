@@ -28,7 +28,8 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QListWidget, QTabWidget, QTableWidget,
     QTableWidgetItem, QProgressBar, QFileDialog, QMessageBox,
-    QDialog, QComboBox, QDialogButtonBox, QTextEdit, QHeaderView, QLineEdit
+    QDialog, QComboBox, QDialogButtonBox, QTextEdit, QHeaderView, QLineEdit,
+    QCompleter, QListView
 )  # noqa: E402
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject  # noqa: E402
 from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QIcon  # noqa: E402
@@ -36,8 +37,8 @@ from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QIcon  # noq
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
-from src.config import TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, OUTPUT_DIR, LOG_FILE_NAME, ARCHIVE_DIR  # noqa: E402
-from src.file_manager import ensure_dirs, load_transaction_files  # noqa: E402
+from src.config import TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, APPDATA_DIR, LOG_FILE_NAME, ARCHIVE_DIR  # noqa: E402
+from src.file_manager import ensure_dirs, load_transaction_files, _load_transaction_file  # noqa: E402
 from src.logger import setup_logging  # noqa: E402
 from src.normalizer import Normalizer  # noqa: E402
 from src.category_manager import CategoryManager  # noqa: E402
@@ -169,7 +170,7 @@ class ProcessThread(QThread):
             self.log_message.emit('ERROR', f"Data error: {str(e)}")
             self.error.emit(error_msg)
         except Exception as e:
-            error_details = f"{str(e)}\\n\\n{traceback.format_exc()}"
+            error_details = f"{str(e)}\n\n{traceback.format_exc()}"
             error_msg = get_user_friendly_error(e)
             self.log_message.emit('ERROR', error_details)
             self.error.emit(error_msg)
@@ -349,22 +350,30 @@ class CategoryDialog(QDialog):
                 sample_label.setFont(QFont('Arial', 9))
                 layout.addWidget(sample_label)
 
-        # Category dropdown
+        # Category dropdown with real filtering
         category_label = QLabel(self.translations.get('category') + ":")
         layout.addWidget(category_label)
 
         self.category_combo = QComboBox()
-        self.category_combo.setEditable(True)  # Enable search/filter
+        self.category_combo.setEditable(True)
+        self.category_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.category_combo.lineEdit().setPlaceholderText(self.translations.get('search') or "Search...")
 
-        # Add categories sorted alphabetically
         sorted_categories = sorted(self.category_structure.keys())
         for cat in sorted_categories:
             self.category_combo.addItem(cat, cat)
 
-        # Connect category change to update subcategory dropdown
+        completer = QCompleter(sorted_categories, self)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        popup = QListView()
+        if self.translations.is_rtl():
+            popup.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        completer.setPopup(popup)
+        self.category_combo.setCompleter(completer)
+
         self.category_combo.currentIndexChanged.connect(self.on_category_changed)
-        self.category_combo.lineEdit().textChanged.connect(self.filter_categories)
         layout.addWidget(self.category_combo)
 
         # Subcategory dropdown
@@ -432,15 +441,6 @@ class CategoryDialog(QDialog):
                 sub_index = self.subcategory_combo.findData(sub)
                 if sub_index >= 0:
                     self.subcategory_combo.setCurrentIndex(sub_index)
-
-    def filter_categories(self, text: str):
-        """Filter category dropdown based on search text."""
-        for i in range(self.category_combo.count()):
-            item_text = self.category_combo.itemText(i)
-            self.category_combo.setItemData(i, item_text)  # Store original text
-            _match = text.lower() in item_text.lower() if text else True
-            # Note: QComboBox doesn't support hiding items directly
-            # The editable combo will filter as user types
 
     def on_category_changed(self, index: int):
         """Update subcategory dropdown when category selection changes."""
@@ -1331,9 +1331,9 @@ class BudgetTrackerGUI(QMainWindow):
         self.translations = Translations(language)
 
         # Setup logging
-        ensure_dirs([OUTPUT_DIR])
+        ensure_dirs([APPDATA_DIR])
         from src.config import get_log_level
-        setup_logging(OUTPUT_DIR, LOG_FILE_NAME, log_level=get_log_level())
+        setup_logging(APPDATA_DIR, LOG_FILE_NAME, log_level=get_log_level())
 
         # Initialize UI
         self.init_ui()
@@ -1514,6 +1514,22 @@ class BudgetTrackerGUI(QMainWindow):
         # Quick stats widget
         self.quick_stats = QuickStatsWidget(self.translations)
         main_layout.addWidget(self.quick_stats)
+
+        # Year selector
+        year_selector_layout = QHBoxLayout()
+        year_selector_label = QLabel(self.translations.get('select_year'))
+        year_selector_label.setFont(QFont('Arial', 10))
+        year_selector_layout.addWidget(year_selector_label)
+
+        self.year_combo = QComboBox()
+        self.year_combo.setFixedWidth(120)
+        self.year_combo.addItem(self.translations.get('all_years'), 'all')
+        self.year_combo.currentIndexChanged.connect(self.on_year_changed)
+        year_selector_layout.addWidget(self.year_combo)
+        year_selector_layout.addStretch()
+        main_layout.addLayout(year_selector_layout)
+
+        self._full_dashboard_df = None
 
         # Preview tabs
         self.preview_tabs = QTabWidget()
@@ -1802,37 +1818,31 @@ class BudgetTrackerGUI(QMainWindow):
             logger.debug(f"Total records found: {len(all_data)}")
             logger.debug(f"Total amount loaded: {total_amount:,.2f}")
             if all_data:
-                summary_df = pd.DataFrame(all_data)
+                self._full_dashboard_df = pd.DataFrame(all_data)
 
-                # Filter to current year only
+                # Populate year selector
+                available_years = sorted(self._full_dashboard_df['year'].unique())
+                self.year_combo.blockSignals(True)
+                self.year_combo.clear()
+                self.year_combo.addItem(self.translations.get('all_years'), 'all')
+                for y in available_years:
+                    self.year_combo.addItem(str(int(y)), int(y))
+                # Default to current year if available
                 import datetime
                 current_year = datetime.datetime.now().year
-                summary_df = summary_df[summary_df['year'] == current_year]
+                current_year_idx = self.year_combo.findData(current_year)
+                if current_year_idx >= 0:
+                    self.year_combo.setCurrentIndex(current_year_idx)
+                self.year_combo.blockSignals(False)
 
-                if not summary_df.empty:
-                    self.log_viewer.add_log('INFO', f'Loaded {len(summary_df)} records from dashboard ({current_year})')
+                # Display data for selected year
+                self._apply_year_filter()
 
-                    # Update displays
-                    self.update_preview_table(summary_df)
-                    self.chart_widget.update_chart(summary_df)
-                    self.quick_stats.update_stats(summary_df)
+                self.log_viewer.add_log('INFO', 'Dashboard data loaded successfully')
 
-                    # Update chart tab title
-                    years = sorted(summary_df['year'].unique())
-                    year_str = ", ".join(map(str, years))
-                    self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.chart_widget),
-                                                 f"{self.translations.get('chart_tab')} ({year_str})")
-                    # Keep table tab title in sync with years
-                    self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.table_tab_widget),
-                                                 f"{self.translations.get('table_tab')} ({year_str})")
-
-                    self.log_viewer.add_log('INFO', 'Dashboard data loaded successfully')
-                    
-                    # Update dashboard info label
-                    self.update_dashboard_info_label()
-                else:
-                    self.log_viewer.add_log('INFO', f'No data found for current year ({current_year})')
+                self.update_dashboard_info_label()
             else:
+                self._full_dashboard_df = None
                 self.log_viewer.add_log('INFO', 'No data found in dashboard')
             
             # Update dashboard info label even if no data
@@ -1854,6 +1864,37 @@ class BudgetTrackerGUI(QMainWindow):
             error_msg = get_user_friendly_error(e)
             self.log_viewer.add_log('WARNING', f'Failed to load dashboard data: {str(e)}')
             QMessageBox.warning(self, self.translations.get('warning_title'), error_msg)
+
+    def on_year_changed(self, index: int):
+        """Handle year selector change."""
+        self._apply_year_filter()
+
+    def _apply_year_filter(self):
+        """Filter dashboard displays by the selected year."""
+        if self._full_dashboard_df is None or self._full_dashboard_df.empty:
+            return
+
+        selected = self.year_combo.currentData()
+        if selected == 'all' or selected is None:
+            summary_df = self._full_dashboard_df
+        else:
+            summary_df = self._full_dashboard_df[self._full_dashboard_df['year'] == selected]
+
+        if summary_df.empty:
+            return
+
+        self.update_preview_table(summary_df)
+        self.chart_widget.update_chart(summary_df)
+        self.quick_stats.update_stats(summary_df)
+
+        years = sorted(summary_df['year'].unique())
+        year_str = ", ".join(map(str, [int(y) for y in years]))
+        self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.chart_widget),
+                                     f"{self.translations.get('chart_tab')} ({year_str})")
+        self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.table_tab_widget),
+                                     f"{self.translations.get('table_tab')} ({year_str})")
+
+        self.log_viewer.add_log('INFO', f'Displaying data for: {year_str}')
 
     def toggle_language(self):
         """
@@ -1935,38 +1976,43 @@ class BudgetTrackerGUI(QMainWindow):
             return
         
         try:
-            # Try to read and normalize the file
-            df = pd.read_excel(file_path)
-            normalizer = Normalizer()
-            df = normalizer.normalize(df)
-            
-            # Calculate statistics
-            count = len(df)
-            total = df['amount'].sum()
-            
-            # Get date range
-            if 'transaction_date' in df.columns and not df.empty:
-                min_date = df['transaction_date'].min()
-                max_date = df['transaction_date'].max()
-                if pd.notna(min_date) and pd.notna(max_date):
-                    date_range = f"{min_date:%m/%Y} - {max_date:%m/%Y}"
+            # Load file with automatic header row detection
+            df = _load_transaction_file(file_path)
+            if df is None:
+                self.file_preview_label.setText("")
+                return
+
+            # Try full normalization for rich preview, fall back to basic stats
+            try:
+                normalizer = Normalizer()
+                norm_df = normalizer.normalize(df)
+                count = len(norm_df)
+                total = norm_df['amount'].sum()
+
+                date_range = ""
+                if 'transaction_date' in norm_df.columns and not norm_df.empty:
+                    min_date = norm_df['transaction_date'].min()
+                    max_date = norm_df['transaction_date'].max()
+                    if pd.notna(min_date) and pd.notna(max_date):
+                        date_range = f" | 📅 {min_date:%m/%Y} - {max_date:%m/%Y}"
+
+                if self.translations.language == 'he':
+                    preview_text = f"📊 {count} עסקאות{date_range} | 💰 ₪{total:,.2f}"
                 else:
-                    date_range = "תאריכים לא תקינים" if self.translations.language == 'he' else "Invalid dates"
-            else:
-                date_range = "אין תאריכים" if self.translations.language == 'he' else "No dates"
-            
-            # Format preview text
-            if self.translations.language == 'he':
-                preview_text = f"📊 {count} עסקאות | 📅 {date_range} | 💰 ₪{total:,.2f}"
-            else:
-                preview_text = f"📊 {count} transactions | 📅 {date_range} | 💰 ₪{total:,.2f}"
-            
+                    preview_text = f"📊 {count} transactions{date_range} | 💰 ₪{total:,.2f}"
+            except Exception:
+                count = len(df)
+                if self.translations.language == 'he':
+                    preview_text = f"📊 {count} שורות"
+                else:
+                    preview_text = f"📊 {count} rows"
+
             self.file_preview_label.setText(preview_text)
             self.file_preview_label.setStyleSheet("color: #0066cc; padding: 3px;")
-            
+
         except Exception as e:
-            # Show error message
-            error_text = f"⚠️ {self.translations.get('error_occurred', error=str(e)[:50])}"
+            error_msg = str(e).split('\n')[0][:60]
+            error_text = f"⚠️ {self.translations.get('error_occurred', error=error_msg)}"
             self.file_preview_label.setText(error_text)
             self.file_preview_label.setStyleSheet("color: #cc0000; padding: 3px;")
 
@@ -2219,10 +2265,54 @@ class BudgetTrackerGUI(QMainWindow):
         """
         Process transaction files from the transactions directory.
 
+        Checks for already-processed files (by content hash) and warns the user.
         Starts a background thread to load, normalize, categorize, and preview
         transactions. Disables the process button and shows progress bar during processing.
         Switches to Logs tab to show progress messages.
         """
+        # Hash files once for both duplicate check and post-processing recording
+        from src.file_manager import _compute_file_hash, _load_processed_hashes
+        transaction_files = [
+            f for f in Path(TRANSACTIONS_DIR).glob('*')
+            if f.suffix in ('.xlsx', '.xls') and f.is_file()
+        ]
+
+        file_hashes = {}
+        for fp in transaction_files:
+            h = _compute_file_hash(fp)
+            if h:
+                file_hashes[fp] = h
+
+        # Check for already-processed files
+        if file_hashes:
+            processed_registry = _load_processed_hashes()
+            already = [
+                (fp, processed_registry[h].get('filename', '?'), processed_registry[h].get('date', '?'))
+                for fp, h in file_hashes.items()
+                if h in processed_registry
+            ]
+            if already:
+                file_lines = "\n".join(
+                    f"  - {fp.name} (processed: {date})"
+                    for fp, _orig, date in already
+                )
+                reply = QMessageBox.question(
+                    self,
+                    self.translations.get('already_processed_title'),
+                    self.translations.get('already_processed_msg', files=file_lines),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    return
+
+        # Store hashes for saving after successful processing
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self._pending_hashes = {
+            h: {'filename': fp.name, 'date': now}
+            for fp, h in file_hashes.items()
+        }
+
         # Disable button during processing
         self.process_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -2321,30 +2411,35 @@ class BudgetTrackerGUI(QMainWindow):
         self.progress_bar.setVisible(False)
 
         if success:
-            # Update preview table
+            # Store data and update year selector
+            self._full_dashboard_df = summary_df
+
+            available_years = sorted(summary_df['year'].unique())
+            self.year_combo.blockSignals(True)
+            self.year_combo.clear()
+            self.year_combo.addItem(self.translations.get('all_years'), 'all')
+            for y in available_years:
+                self.year_combo.addItem(str(int(y)), int(y))
+            self.year_combo.setCurrentIndex(0)
+            self.year_combo.blockSignals(False)
+
+            # Update displays
             self.update_preview_table(summary_df)
 
-            # Update chart
             try:
                 self.chart_widget.update_chart(summary_df)
-
-                # Update chart tab title
                 years = sorted(summary_df['year'].unique())
-                year_str = ", ".join(map(str, years))
+                year_str = ", ".join(map(str, [int(y) for y in years]))
                 self.preview_tabs.setTabText(self.preview_tabs.indexOf(self.chart_widget),
                                              f"{self.translations.get('chart_tab')} ({year_str})")
-
                 self.log_viewer.add_log('INFO', 'Chart updated successfully')
             except Exception as e:
                 self.log_viewer.add_log('WARNING', f'Failed to update chart: {str(e)}')
 
-            # Update quick stats
             try:
                 self.quick_stats.update_stats(summary_df)
             except Exception as e:
                 self.log_viewer.add_log('WARNING', f'Failed to update quick stats: {str(e)}')
-            except Exception as e:
-                self.log_viewer.add_log('WARNING', f'Failed to update chart: {str(e)}')
 
             # Write to dashboard
             self.log_viewer.add_log('INFO', 'Writing to dashboard...')
@@ -2381,6 +2476,15 @@ class BudgetTrackerGUI(QMainWindow):
                     self.translations.get('warning_title'),
                     f"Error updating dashboard:\n\n{error_msg}"
                 )
+
+            # Record processed file hashes
+            if hasattr(self, '_pending_hashes') and self._pending_hashes:
+                from src.file_manager import _load_processed_hashes, _save_processed_hashes
+                hashes = _load_processed_hashes()
+                hashes.update(self._pending_hashes)
+                _save_processed_hashes(hashes)
+                self.log_viewer.add_log('INFO', f'Recorded {len(self._pending_hashes)} processed file hash(es)')
+                self._pending_hashes = {}
 
             # Refresh archive
             self.refresh_archive()
@@ -2716,7 +2820,7 @@ def main():
 
         import traceback
         error_msg = ''.join(traceback.format_exception(exctype, value, tb))
-        print(f"Unhandled exception (ID: {error_id}):\\n{error_msg}")
+        print(f"Unhandled exception (ID: {error_id}):\n{error_msg}")
 
         QMessageBox.critical(None, "Fatal Error", user_msg)
         sys.exit(1)
