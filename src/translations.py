@@ -22,7 +22,7 @@ class Translations:
         'refresh_all': 'רענן דשבורד',
         'files_count': 'קבצים: {count}',
         'total_size': 'גודל כולל: {size}',
-        'drag_drop_hint': 'גרור קבצי Excel לכאן',
+        'drag_drop_hint': 'גרור קבצי Excel או PDF לכאן',
 
         # Process section
         'process_transactions': 'עבד עסקאות',
@@ -105,7 +105,7 @@ class Translations:
 
         # Messages
         'no_files': 'לא נמצאו קבצי עסקאות',
-        'select_files': 'בחר קבצי Excel',
+        'select_files': 'בחר קבצי Excel או PDF',
         'file_imported': 'קובץ יובא בהצלחה',
         'files_imported': '{count} קבצים יובאו בהצלחה',
         'dashboard_opened': 'הדשבורד נפתח באקסל',
@@ -153,7 +153,7 @@ class Translations:
         'refresh_all': 'Refresh Dashboard',
         'files_count': 'Files: {count}',
         'total_size': 'Total Size: {size}',
-        'drag_drop_hint': 'Drag Excel files here',
+        'drag_drop_hint': 'Drag Excel or PDF files here',
 
         # Process section
         'process_transactions': 'Process Transactions',
@@ -248,7 +248,7 @@ class Translations:
 
         # Messages
         'no_files': 'No transaction files found',
-        'select_files': 'Select Excel Files',
+        'select_files': 'Select Excel or PDF Files',
         'file_imported': 'File imported successfully',
         'files_imported': '{count} files imported successfully',
         'dashboard_opened': 'Dashboard opened in Excel',

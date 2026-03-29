@@ -253,12 +253,12 @@ def validate_user_input(input_str: str, input_type: str) -> tuple[bool, Optional
     return True, None
 
 
-def validate_excel_file(file_path: Path) -> bool:
+def validate_transaction_file(file_path: Path) -> bool:
     """
-    Comprehensive validation for Excel files.
+    Comprehensive validation for supported transaction files.
 
     Args:
-        file_path: Path to Excel file
+        file_path: Path to transaction file
 
     Returns:
         True if all validations pass
@@ -273,7 +273,12 @@ def validate_excel_file(file_path: Path) -> bool:
         raise ValidationError(
             f"Invalid File: '{file_path}' is not a valid file.\n"
             f"It may be a directory or a special system item.\n"
-            f"Please select a regular Excel file (.xlsx or .xls)."
+            f"Please select a regular transaction file (.xlsx, .xls, or .pdf)."
         )
 
     return True
+
+
+def validate_excel_file(file_path: Path) -> bool:
+    """Backward-compatible wrapper for transaction file validation."""
+    return validate_transaction_file(file_path)

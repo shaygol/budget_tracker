@@ -37,7 +37,7 @@ from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QIcon  # noq
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
-from src.config import TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, APPDATA_DIR, LOG_FILE_NAME, ARCHIVE_DIR  # noqa: E402
+from src.config import TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, APPDATA_DIR, LOG_FILE_NAME, ARCHIVE_DIR, SUPPORTED_EXTENSIONS  # noqa: E402
 from src.file_manager import ensure_dirs, load_transaction_files, _load_transaction_file  # noqa: E402
 from src.logger import setup_logging  # noqa: E402
 from src.normalizer import Normalizer  # noqa: E402
@@ -665,28 +665,53 @@ class LogViewerWidget(QWidget):
             handler.setLevel(LOG_LEVEL_MAP[level_name])
 
 
-class LogViewerHandler(logging.Handler, QObject):
-    """
-    Logging handler that forwards log records to the GUI log viewer.
-    """
+class _LogSignalEmitter(QObject):
+    """Qt signal bridge for forwarding log records to the viewer."""
     log_signal = pyqtSignal(str, str)
 
+
+class LogViewerHandler(logging.Handler):
+    """Logging handler that forwards log records to the GUI log viewer."""
+
     def __init__(self, viewer: LogViewerWidget):
-        QObject.__init__(self)
-        logging.Handler.__init__(self)
-        self.log_signal.connect(viewer.add_log)
+        super().__init__()
+        self._emitter = _LogSignalEmitter()
+        self._viewer = viewer
+        self._is_closed = False
+        self._emitter.log_signal.connect(viewer.add_log)
 
     def emit(self, record: logging.LogRecord):
+        if self._is_closed or self._emitter is None:
+            return
+
         try:
             msg = self.format(record)
-            # Check if the widget still exists before emitting
-            if hasattr(self, 'log_signal'):
-                self.log_signal.emit(record.levelname, msg)
+            self._emitter.log_signal.emit(record.levelname, msg)
         except RuntimeError:
             # Widget has been deleted, ignore
             pass
         except Exception:
             self.handleError(record)
+
+    def close(self):
+        """Disconnect Qt resources before logging shutdown runs."""
+        self._is_closed = True
+
+        if self._emitter is not None:
+            try:
+                self._emitter.log_signal.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+
+            if QApplication.instance() is not None:
+                try:
+                    self._emitter.deleteLater()
+                except RuntimeError:
+                    pass
+
+        self._emitter = None
+        self._viewer = None
+        super().close()
 
 
 class QuickStatsWidget(QWidget):
@@ -1086,7 +1111,7 @@ class FileListWidget(QListWidget):
         """
         Handle file drop event.
 
-        Extracts Excel file paths from dropped URLs and emits files_dropped signal.
+        Extracts supported transaction file paths from dropped URLs and emits files_dropped signal.
 
         Args:
             event: Drop event
@@ -1094,7 +1119,7 @@ class FileListWidget(QListWidget):
         files = []
         for url in event.mimeData().urls():
             file_path = url.toLocalFile()
-            if file_path.endswith(('.xlsx', '.xls')):
+            if file_path.lower().endswith(tuple(SUPPORTED_EXTENSIONS)):
                 files.append(file_path)
 
         if files:
@@ -1656,13 +1681,13 @@ class BudgetTrackerGUI(QMainWindow):
 
     def import_dropped_files(self, files: List[str]):
         """Import files dropped via drag and drop with duplicate detection."""
-        from src.validators import validate_excel_file, ValidationError
+        from src.validators import validate_transaction_file, ValidationError
         count, errors, duplicates = 0, [], []
 
         for file_path in files:
             try:
                 src = Path(file_path)
-                validate_excel_file(src)
+                validate_transaction_file(src)
                 
                 # Calculate hash
                 src_hash = calculate_file_hash(src)
@@ -2020,7 +2045,7 @@ class BudgetTrackerGUI(QMainWindow):
         """
         Refresh the transaction files list.
 
-        Scans the transactions directory for Excel files and updates the file list
+        Scans the transactions directory for supported transaction files and updates the file list
         widget. Displays file count and total size information.
         """
         self.file_list.clear()
@@ -2029,7 +2054,10 @@ class BudgetTrackerGUI(QMainWindow):
             ensure_dirs([TRANSACTIONS_DIR])
             return
 
-        files = list(TRANSACTIONS_DIR.glob('*.xls*'))
+        files = [
+            file_path for file_path in TRANSACTIONS_DIR.glob('*')
+            if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS
+        ]
         for file_path in files:
             self.file_list.addItem(file_path.name)
 
@@ -2093,7 +2121,7 @@ class BudgetTrackerGUI(QMainWindow):
         """
         Refresh the archive files list.
 
-        Scans the archive directory for Excel files and updates the archive list widget.
+        Scans the archive directory for supported transaction files and updates the archive list widget.
         Displays archive file count.
         """
         self.archive_list.clear()
@@ -2102,7 +2130,10 @@ class BudgetTrackerGUI(QMainWindow):
         if not archive_path.exists():
             return
 
-        files = list(archive_path.glob('*.xls*'))
+        files = [
+            file_path for file_path in archive_path.glob('*')
+            if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS
+        ]
         for file_path in files:
             self.archive_list.addItem(file_path.name)
 
@@ -2125,9 +2156,9 @@ class BudgetTrackerGUI(QMainWindow):
 
     def import_files(self):
         """
-        Import Excel files via file dialog with duplicate detection.
+        Import transaction files via file dialog with duplicate detection.
 
-        Opens a file selection dialog allowing user to choose one or more Excel files.
+        Opens a file selection dialog allowing user to choose one or more supported transaction files.
         Copies selected files to the transactions directory and refreshes the file list.
         Shows success message with count of imported files.
         Validates files before importing and provides user-friendly error messages.
@@ -2137,7 +2168,7 @@ class BudgetTrackerGUI(QMainWindow):
             self,
             self.translations.get('select_files'),
             "",
-            "Excel Files (*.xlsx *.xls)"
+            "Transaction Files (*.xlsx *.xls *.pdf)"
         )
 
         if not files:
@@ -2170,7 +2201,7 @@ class BudgetTrackerGUI(QMainWindow):
 
                 # Check if source file is locked
                 if is_file_locked(src):
-                    errors.append(f"{src.name}: File is locked (may be open in Excel)")
+                    errors.append(f"{src.name}: File is locked (may be open in another application)")
                     continue
 
                 dst = TRANSACTIONS_DIR / src.name
@@ -2274,7 +2305,7 @@ class BudgetTrackerGUI(QMainWindow):
         from src.file_manager import _compute_file_hash, _load_processed_hashes
         transaction_files = [
             f for f in Path(TRANSACTIONS_DIR).glob('*')
-            if f.suffix in ('.xlsx', '.xls') and f.is_file()
+            if f.suffix.lower() in SUPPORTED_EXTENSIONS and f.is_file()
         ]
 
         file_hashes = {}
@@ -2737,8 +2768,9 @@ class BudgetTrackerGUI(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             archive_path = ARCHIVE_DIR
             if archive_path.exists():
-                for file_path in archive_path.glob('*.xls*'):
-                    file_path.unlink()
+                for file_path in archive_path.glob('*'):
+                    if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                        file_path.unlink()
 
             self.refresh_archive()
             QMessageBox.information(
@@ -2793,6 +2825,7 @@ class BudgetTrackerGUI(QMainWindow):
             try:
                 logging.getLogger().removeHandler(self._log_viewer_handler)
                 self._log_viewer_handler.close()
+                self._log_viewer_handler = None
             except Exception:
                 pass  # Ignore errors during cleanup
         

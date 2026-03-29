@@ -10,6 +10,19 @@ from src.config import get_log_level
 # Default log rotation settings
 MAX_LOG_SIZE_MB = 10
 BACKUP_COUNT = 5
+NOISY_LIBRARY_LOGGERS = (
+    'matplotlib',
+    'PIL',
+    'pdfminer',
+    'pdfminer.converter',
+    'pdfminer.layout',
+    'pdfminer.pdfdocument',
+    'pdfminer.pdfinterp',
+    'pdfminer.pdfpage',
+    'pdfminer.pdfparser',
+    'pdfminer.psparser',
+    'pdfplumber',
+)
 
 
 class StructuredFormatter(logging.Formatter):
@@ -101,6 +114,10 @@ def setup_logging(log_dir: str, log_file_name: str,
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+
+    # Keep third-party internals from flooding the app logs in DEBUG mode.
+    for logger_name in NOISY_LIBRARY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     logger.debug("Logging initialized", extra={
         'log_file': log_file,
