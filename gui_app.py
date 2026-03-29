@@ -665,28 +665,53 @@ class LogViewerWidget(QWidget):
             handler.setLevel(LOG_LEVEL_MAP[level_name])
 
 
-class LogViewerHandler(logging.Handler, QObject):
-    """
-    Logging handler that forwards log records to the GUI log viewer.
-    """
+class _LogSignalEmitter(QObject):
+    """Qt signal bridge for forwarding log records to the viewer."""
     log_signal = pyqtSignal(str, str)
 
+
+class LogViewerHandler(logging.Handler):
+    """Logging handler that forwards log records to the GUI log viewer."""
+
     def __init__(self, viewer: LogViewerWidget):
-        QObject.__init__(self)
-        logging.Handler.__init__(self)
-        self.log_signal.connect(viewer.add_log)
+        super().__init__()
+        self._emitter = _LogSignalEmitter()
+        self._viewer = viewer
+        self._is_closed = False
+        self._emitter.log_signal.connect(viewer.add_log)
 
     def emit(self, record: logging.LogRecord):
+        if self._is_closed or self._emitter is None:
+            return
+
         try:
             msg = self.format(record)
-            # Check if the widget still exists before emitting
-            if hasattr(self, 'log_signal'):
-                self.log_signal.emit(record.levelname, msg)
+            self._emitter.log_signal.emit(record.levelname, msg)
         except RuntimeError:
             # Widget has been deleted, ignore
             pass
         except Exception:
             self.handleError(record)
+
+    def close(self):
+        """Disconnect Qt resources before logging shutdown runs."""
+        self._is_closed = True
+
+        if self._emitter is not None:
+            try:
+                self._emitter.log_signal.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+
+            if QApplication.instance() is not None:
+                try:
+                    self._emitter.deleteLater()
+                except RuntimeError:
+                    pass
+
+        self._emitter = None
+        self._viewer = None
+        super().close()
 
 
 class QuickStatsWidget(QWidget):
@@ -2800,6 +2825,7 @@ class BudgetTrackerGUI(QMainWindow):
             try:
                 logging.getLogger().removeHandler(self._log_viewer_handler)
                 self._log_viewer_handler.close()
+                self._log_viewer_handler = None
             except Exception:
                 pass  # Ignore errors during cleanup
         
