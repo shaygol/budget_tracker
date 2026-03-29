@@ -7,13 +7,13 @@ from src.normalizer import Normalizer
 from src.category_manager import CategoryManager
 from src.previewer import Previewer
 from src.dashboard_writer import DashboardWriter
-from src.config import OUTPUT_DIR, LOG_FILE_NAME, TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH
+from src.config import APPDATA_DIR, LOG_FILE_NAME, TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH
 
 def main_cli():
     """Run in CLI mode (original functionality)."""
     try:
-        ensure_dirs([OUTPUT_DIR])
-        setup_logging(OUTPUT_DIR, LOG_FILE_NAME)
+        ensure_dirs([APPDATA_DIR])
+        setup_logging(APPDATA_DIR, LOG_FILE_NAME)
 
         dfs = load_transaction_files(TRANSACTIONS_DIR)
         if not dfs:
