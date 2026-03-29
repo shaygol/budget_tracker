@@ -70,7 +70,7 @@ class Normalizer:
 
     @staticmethod
     def _parse_amount(series: pd.Series) -> pd.Series:
-        s = series.astype(str).str.replace(r"[,\s₪]", "", regex=True)
+        s = series.astype(str).str.replace(r"[,\s₪$]", "", regex=True)
         return pd.to_numeric(s, errors='coerce')
 
     @staticmethod

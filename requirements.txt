@@ -1,6 +1,8 @@
 # Dependencies
 pandas  # Data manipulation and transaction processing
 openpyxl  # Excel file reading and writing
+pypdf  # Text-based PDF extraction for transaction imports
+pdfplumber  # Layout-aware PDF parsing for credit card statements
 PyQt5>=5.15.0  # Modern GUI framework
 matplotlib>=3.7.0  # Charts and graphs generation
 

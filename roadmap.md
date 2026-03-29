@@ -8,6 +8,8 @@
 - [x] **File Preview**: Show transaction count, date range, and total when selecting file
 - [x] **Interactive Chart Filtering**: Click category to show subcategory breakdown with RTL support
 - [x] **Robust File Parsing**: Flexible header detection (handles quote variations, extra spaces, simplified names)
+- [x] **PDF Transaction Import**: Import text-based credit card statement PDFs through the same GUI flow as Excel
+- [x] **PDF Statement Parsing Hardening**: Added layout-aware parsing, merchant cleanup, foreign-currency support, and focused parser tests
 - [x] **Pre-loaded Common Mappings**: Default merchant-to-category mappings for 211 common Israeli merchants
 
 ---
@@ -44,7 +46,7 @@ _(Currently none)_
   - [ ] Column position hints (amount typically in rightmost columns)
 - [ ] **File Format Support**
   - [ ] CSV import support
-  - [ ] PDF bank statement parsing
+  - [x] PDF bank statement parsing
   - [ ] Direct bank API integration
 
 ---

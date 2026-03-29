@@ -1,20 +1,20 @@
 # Budget Tracker
 
-**Budget Tracker** is a Python-based tool for processing, categorizing, and summarizing monthly financial transactions from Excel files.
+**Budget Tracker** is a Python-based tool for processing, categorizing, and summarizing monthly financial transactions from Excel files and text-based PDF credit card statements.
 It supports Hebrew-language inputs and outputs a categorized summary into a pre-designed Excel dashboard.
 
 ## Features
 
 ### Core Features
 - **Modern GUI Interface**: Easy-to-use graphical interface with Hebrew/English support
-- **Automated Processing**: Load and normalize Excel transaction files (`.xlsx`, `.xls`)
+- **Automated Processing**: Load and normalize transaction files (`.xlsx`, `.xls`, text-based `.pdf`)
 - **Smart Categorization**: Map merchants to user-defined budget categories and subcategories
 - **Dashboard Integration**: Output categorized monthly summaries into an existing formatted dashboard
 - **Backups**: Automatic backups of your dashboard, archived transaction files
 - **Hebrew Support**: Built-in RTL support for Hebrew text and date formats
 
 ### File Management
-- **Drag & Drop**: Import files by dragging them into the window
+- **Drag & Drop**: Import Excel and text-based PDF files by dragging them into the window
 - **Duplicate Detection**: SHA256 hash-based detection prevents duplicate imports
 - **File Preview**: See transaction count, date range, and total when selecting a file
 - **Quick Delete**: Remove files with confirmation dialog
@@ -72,7 +72,7 @@ The Budget Tracker uses a two-tier category system:
    *(GUI starts by default)*
 
 2. **Import Files**: 
-   - Drag & drop Excel files into the window, OR
+   - Drag & drop Excel or text-based PDF files into the window, OR
    - Click "Import Files" button to browse
    
 3. **Preview Files**: Click on a file to see transaction count, dates, and total

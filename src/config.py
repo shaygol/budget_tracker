@@ -28,7 +28,7 @@ PROCESSED_HASHES_PATH = APPDATA_DIR / 'processed_hashes.json'
 LOG_FILE_NAME = 'budget.log'
 TEMPLATE_SHEET_NAME = "Template"
 
-SUPPORTED_EXTENSIONS = ['.xlsx', '.xls']
+SUPPORTED_EXTENSIONS = ['.xlsx', '.xls', '.pdf']
 
 # Default log level
 LOG_SEVERITY = logging.DEBUG
@@ -93,9 +93,9 @@ FILE_HEADER_KEYWORDS = {
 }
 
 # Security and Validation Constants
-MAX_FILE_SIZE_MB = 50  # Maximum file size for Excel files
+MAX_FILE_SIZE_MB = 50  # Maximum file size for supported transaction files
 MAX_CATEGORIES = 10000  # Maximum number of categories to prevent unbounded growth
 MAX_MERCHANT_NAME_LENGTH = 200  # Maximum length for merchant names
-ALLOWED_FILE_EXTENSIONS = ['.xlsx', '.xls']
+ALLOWED_FILE_EXTENSIONS = ['.xlsx', '.xls', '.pdf']
 BACKUP_SUFFIX = '.backup'
 PROCESSING_TIMEOUT_SECONDS = 300  # 5 minutes max processing time
