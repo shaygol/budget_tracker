@@ -3,5 +3,6 @@
 /UserFiles/**
 /appdata/**
 /deployment/**
+*.log
 *venv/
 

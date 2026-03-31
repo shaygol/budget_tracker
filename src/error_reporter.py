@@ -99,7 +99,7 @@ def setup_error_reporting(error_dir: Optional[Path] = None) -> ErrorReporter:
     Set up global error reporting.
 
     Args:
-        error_dir: Directory for error reports (defaults to output/errors)
+        error_dir: Directory for error reports (defaults to appdata/errors)
 
     Returns:
         ErrorReporter instance
