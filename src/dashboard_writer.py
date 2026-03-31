@@ -195,6 +195,7 @@ class DashboardWriter:
                 existing_map = self._build_subcat_location_map(ws, category_ranges)
 
             row_idx = existing_map[(cat, subcat)]
+            self._ensure_writable_month_cell(ws, row_idx, col + 1)
             cell = ws.cell(row=row_idx, column=col + 1)
             existing_value = cell.value
 
@@ -351,3 +352,53 @@ class DashboardWriter:
                 start_column=min_col,
                 end_column=max_col,
             )
+
+    def _ensure_writable_month_cell(self, ws: Worksheet, row: int, column: int) -> None:
+        """
+        Ensure month cells are writable even if legacy sheets merged them.
+
+        Some existing dashboards contain merged month ranges in data rows (e.g. C4:N4).
+        Writing to a non-top-left merged cell raises:
+        "'MergedCell' object attribute 'value' is read-only".
+        """
+        from copy import copy
+
+        for merged_range in list(ws.merged_cells.ranges):
+            if (
+                merged_range.min_row <= row <= merged_range.max_row
+                and merged_range.min_col <= column <= merged_range.max_col
+            ):
+                top_left = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
+                # Keep visual style consistent after unmerge.
+                top_alignment = copy(top_left.alignment)
+                top_font = copy(top_left.font)
+                top_fill = copy(top_left.fill)
+                top_border = copy(top_left.border)
+                top_number_format = top_left.number_format
+                top_protection = copy(top_left.protection)
+
+                ws.unmerge_cells(
+                    start_row=merged_range.min_row,
+                    end_row=merged_range.max_row,
+                    start_column=merged_range.min_col,
+                    end_column=merged_range.max_col,
+                )
+
+                for r in range(merged_range.min_row, merged_range.max_row + 1):
+                    for c in range(merged_range.min_col, merged_range.max_col + 1):
+                        cell = ws.cell(row=r, column=c)
+                        cell.alignment = copy(top_alignment)
+                        cell.font = copy(top_font)
+                        cell.fill = copy(top_fill)
+                        cell.border = copy(top_border)
+                        cell.number_format = top_number_format
+                        cell.protection = copy(top_protection)
+
+                logger.warning(
+                    "Unmerged legacy month range %s to write into %s%d",
+                    str(merged_range),
+                    ws.cell(row=row, column=column).column_letter,
+                    row,
+                )
+                return
+

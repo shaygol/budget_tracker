@@ -127,6 +127,8 @@ class CategoryManager:
         self.categories_path = categories_path
         self.dashboard_path = dashboard_path
         self.strict_validation = strict_validation
+        # Merchants explicitly confirmed by user (loaded from categories.json or set in GUI flow)
+        self._explicit_user_merchants = set()
 
         self.category_map = self._load_category_map()
         self.valid_categories = self.load_category_structure_from_template(strict=strict_validation, use_cache=True)
@@ -144,6 +146,7 @@ class CategoryManager:
         
         # Load user categories (overrides defaults)
         user_map = self._load_user_categories()
+        self._explicit_user_merchants = set(user_map.keys())
         
         # Merge: user overrides default
         merged_map = {**default_map, **user_map}
@@ -540,6 +543,7 @@ class CategoryManager:
                     if 1 <= idx <= len(flat_choices):
                         cat, sub = flat_choices[idx - 1]
                         self.category_map[merchant] = [cat, sub]
+                        self.mark_user_confirmed(merchant)
                         df.loc[df['merchant'] == merchant, 'category'] = cat
                         df.loc[df['merchant'] == merchant, 'subcat'] = sub
                         break
@@ -709,8 +713,11 @@ class CategoryManager:
     def save_categories(self) -> None:
         """
         Save only user-confirmed category mappings to file.
-        Default categories are not saved (they're always loaded from default_categories.json).
-        Only saves mappings that differ from defaults or are new.
+        Default categories are not saved by default, except when explicitly confirmed by user.
+        Saves mappings that are:
+        1. Explicitly confirmed by user, OR
+        2. Different from defaults, OR
+        3. Not present in defaults.
         """
         # Load defaults for comparison
         default_map = self._load_default_categories()
@@ -722,13 +729,19 @@ class CategoryManager:
                 # Keep only [category, subcategory]
                 clean_mapping = mapping[:2]
                 
-                # Save if:
-                # 1. Merchant not in defaults, OR
-                # 2. Mapping differs from default
-                if merchant not in default_map or clean_mapping != default_map.get(merchant, [])[:2]:
+                if (
+                    merchant in self._explicit_user_merchants
+                    or merchant not in default_map
+                    or clean_mapping != default_map.get(merchant, [])[:2]
+                ):
                     user_only_map[merchant] = clean_mapping
         
         with open(self.categories_path, 'w', encoding='utf-8') as f:
             json.dump(user_only_map, f, ensure_ascii=False, indent=2)
         
         logger.info(f"Saved {len(user_only_map)} user-specific category mappings")
+
+    def mark_user_confirmed(self, merchant: str) -> None:
+        """Mark merchant mapping as explicitly confirmed by user."""
+        if merchant:
+            self._explicit_user_merchants.add(merchant)

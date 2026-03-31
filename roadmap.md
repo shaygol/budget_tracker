@@ -31,6 +31,7 @@ _(Currently none)_
 - [ ] **Budget Goals**: Set monthly limits per category and track progress.
 - [ ] **History View**: Tab to view a log of past imports and archived files.
 - [ ] **Advanced Charts**: Interactive pie charts and trend lines.
+- [ ] **Dashboard Excel Auto-Charts**: Re-introduce reliable auto-generation of yearly sheet charts from template/category data.
 - [x] **Deployment**: Bundle application into a single `.exe` file using PyInstaller
 - [ ] **Maintenance**: Increase GUI test coverage and add docstrings.
 - [x] **icon**: Add icon to application

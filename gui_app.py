@@ -233,18 +233,18 @@ class ProcessThread(QThread):
 
         # Include merchants that need user input:
         # 1. Not in category_map at all
-        # 2. From default categories only (not user-confirmed)
-        # 3. Mapped to stale categories no longer in the template
+        # 2. Mapped to stale categories no longer in the template
+        # 3. Mapped only by defaults and not explicitly confirmed by user yet
         default_map = cat_mgr._load_default_categories()
-        user_map = cat_mgr._load_user_categories()
+        confirmed_defaults = getattr(cat_mgr, "_explicit_user_merchants", set())
         stale_set = set(stale)
 
         unknown = [
             m for m in df['merchant'].unique()
             if m and (
                 m not in cat_mgr.category_map
-                or (m in default_map and m not in user_map)
                 or m in stale_set
+                or (m in default_map and m not in confirmed_defaults)
             )
         ]
 
@@ -293,6 +293,7 @@ class ProcessThread(QThread):
             if self.category_response:
                 cat, sub = self.category_response
                 cat_mgr.category_map[merchant] = [cat, sub]
+                cat_mgr.mark_user_confirmed(merchant)
                 df.loc[df['merchant'] == merchant, 'category'] = cat
                 df.loc[df['merchant'] == merchant, 'subcat'] = sub
                 self.log_message.emit('INFO', f'Mapped {merchant} -> {cat}/{sub}')
@@ -2502,7 +2503,10 @@ class BudgetTrackerGUI(QMainWindow):
                     self.log_viewer.add_log('WARNING', 'Skipped dashboard write - file is locked')
                 else:
                     writer = DashboardWriter(DASHBOARD_FILE_PATH)
-                    writer.update(summary_df, conflict_resolver=self.resolve_conflict)
+                    writer.update(
+                        summary_df,
+                        conflict_resolver=self.resolve_conflict,
+                    )
                     self.log_viewer.add_log('INFO', 'Dashboard updated successfully')
                     dashboard_ok = True
 
