@@ -12,7 +12,7 @@ from src.config import APPDATA_DIR, LOG_FILE_NAME, TRANSACTIONS_DIR, CATEGORIES_
 def main_cli():
     """Run in CLI mode (original functionality)."""
     try:
-        ensure_dirs([APPDATA_DIR])
+        ensure_dirs([APPDATA_DIR, TRANSACTIONS_DIR])
         setup_logging(APPDATA_DIR, LOG_FILE_NAME)
 
         dfs = load_transaction_files(TRANSACTIONS_DIR)

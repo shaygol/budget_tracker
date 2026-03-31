@@ -596,7 +596,6 @@ def load_transaction_files(transactions_dir: str | Path) -> List[pd.DataFrame]:
         df = _load_transaction_file(file_path)
         if df is not None:
             dataframes.append(df)
-            archive_files(file_path.name)
 
     return dataframes
 
@@ -619,7 +618,7 @@ def ensure_dirs(dirs: List[Path | str]) -> None:
         os.makedirs(d, exist_ok=True)
 
 def archive_files(file_name: Optional[str] = None) -> None:
-    logger.debug(f"Archived file '{file_name}'")
+    logger.debug(f"Archiving file '{file_name}'")
     archive_dir_path = ARCHIVE_DIR
     ensure_dirs([archive_dir_path])
     file_list = [file_name] if file_name else os.listdir(TRANSACTIONS_DIR)

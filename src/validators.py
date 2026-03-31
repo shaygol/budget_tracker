@@ -9,7 +9,7 @@ import logging
 from src.config import (
     MAX_FILE_SIZE_MB,
     MAX_MERCHANT_NAME_LENGTH,
-    ALLOWED_FILE_EXTENSIONS,
+    SUPPORTED_EXTENSIONS,
     TRANSACTIONS_DIR
 )
 
@@ -140,7 +140,7 @@ def validate_file_extension(file_path: Path, allowed_extensions: list = None) ->
         ValidationError: If extension not allowed
     """
     if allowed_extensions is None:
-        allowed_extensions = ALLOWED_FILE_EXTENSIONS
+        allowed_extensions = SUPPORTED_EXTENSIONS
 
     extension = file_path.suffix.lower()
 

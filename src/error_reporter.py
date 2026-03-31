@@ -24,7 +24,6 @@ class ErrorReporter:
             error_dir: Directory to save error reports
         """
         self.error_dir = Path(error_dir)
-        self.error_dir.mkdir(parents=True, exist_ok=True)
 
     def capture_exception(self, exctype: type, value: Exception, tb,
                          context: Optional[Dict[str, Any]] = None) -> str:
@@ -67,6 +66,7 @@ class ErrorReporter:
 
         # Save report
         try:
+            self.error_dir.mkdir(parents=True, exist_ok=True)
             with open(report_path, 'w', encoding='utf-8') as f:
                 json.dump(report, f, indent=2, ensure_ascii=False)
             logger.error(f"Error report saved: {report_path}")
@@ -99,7 +99,7 @@ def setup_error_reporting(error_dir: Optional[Path] = None) -> ErrorReporter:
     Set up global error reporting.
 
     Args:
-        error_dir: Directory for error reports (defaults to output/errors)
+        error_dir: Directory for error reports (defaults to appdata/errors)
 
     Returns:
         ErrorReporter instance

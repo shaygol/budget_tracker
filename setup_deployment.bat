@@ -30,13 +30,18 @@ if exist "badget_tracker.ico" (
     set ICON_DATA=
 )
 
+:: Read version from VERSION file
+set /p APP_VERSION=<VERSION
+echo Building version: %APP_VERSION%
+
 venv\Scripts\pyinstaller.exe ^
-    --name "BudgetTracker" ^
+    --name "BudgetTracker_%APP_VERSION%" ^
     --onefile ^
     --windowed ^
     %ICON_ARG% ^
     %ICON_DATA% ^
     --add-data "src/default_categories.json;src" ^
+    --add-data "VERSION;." ^
     --hidden-import=pandas ^
     --hidden-import=openpyxl ^
     --hidden-import=matplotlib ^
@@ -67,7 +72,7 @@ if not exist "deployment" mkdir "deployment"
 
 :: Copy executable
 echo Copying executable...
-copy "dist\BudgetTracker.exe" "deployment\" /Y
+copy "dist\BudgetTracker_%APP_VERSION%.exe" "deployment\" /Y
 
 :: Copy logo (icon) if present for distribution
 if exist "badget_tracker.ico" (
@@ -83,6 +88,8 @@ if not exist "deployment\UserFiles" mkdir "deployment\UserFiles"
 if not exist "deployment\UserFiles\backups" mkdir "deployment\UserFiles\backups"
 if not exist "deployment\UserFiles\backups\archive" mkdir "deployment\UserFiles\backups\archive"
 if not exist "deployment\UserFiles\backups\dashboard" mkdir "deployment\UserFiles\backups\dashboard"
+if not exist "deployment\appdata" mkdir "deployment\appdata"
+if not exist "deployment\appdata\pending" mkdir "deployment\appdata\pending"
 
 :: -------------------------------------------------------------
 :: Step 3: Setup Dashboard (Copy & Clean)
