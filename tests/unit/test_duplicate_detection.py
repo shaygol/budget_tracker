@@ -1,5 +1,6 @@
 """Tests for SHA256-based duplicate file detection."""
 import pytest
+import shutil
 import tempfile
 from pathlib import Path
 import pandas as pd
@@ -11,7 +12,6 @@ class TestDuplicateDetection:
     
     def test_identical_files_produce_same_hash(self, tmp_path):
         """Test that identical files produce the same SHA256 hash."""
-        # Create two identical Excel files
         df = pd.DataFrame({
             'transaction_date': ['2024-01-01'],
             'merchant': ['Test Merchant'],
@@ -22,7 +22,7 @@ class TestDuplicateDetection:
         file2 = tmp_path / "file2.xlsx"
         
         df.to_excel(file1, index=False)
-        df.to_excel(file2, index=False)
+        shutil.copy2(file1, file2)
         
         hash1 = calculate_file_hash(file1)
         hash2 = calculate_file_hash(file2)
@@ -67,7 +67,7 @@ class TestDuplicateDetection:
         file2 = tmp_path / "transactions.xlsx"
         
         df.to_excel(file1, index=False)
-        df.to_excel(file2, index=False)
+        shutil.copy2(file1, file2)
         
         hash1 = calculate_file_hash(file1)
         hash2 = calculate_file_hash(file2)

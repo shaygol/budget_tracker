@@ -37,7 +37,7 @@ from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent, QColor, QIcon  # noq
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
-from src.config import TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, APPDATA_DIR, LOG_FILE_NAME, ARCHIVE_DIR, SUPPORTED_EXTENSIONS  # noqa: E402
+from src.config import TRANSACTIONS_DIR, CATEGORIES_FILE_PATH, DASHBOARD_FILE_PATH, APPDATA_DIR, LOG_FILE_NAME, ARCHIVE_DIR, SUPPORTED_EXTENSIONS, APP_VERSION  # noqa: E402
 from src.file_manager import ensure_dirs, load_transaction_files, _load_transaction_file  # noqa: E402
 from src.logger import setup_logging  # noqa: E402
 from src.normalizer import Normalizer  # noqa: E402
@@ -214,24 +214,38 @@ class ProcessThread(QThread):
         df['category'] = df['merchant'].map(lambda m: cat_mgr.category_map.get(m, [None, None])[0])
         df['subcat'] = df['merchant'].map(lambda m: cat_mgr.category_map.get(m, [None, None])[1])
 
-        # Include merchants that are either:
-        # 1. Not in category_map at all, OR
-        # 2. From default categories only (not user-confirmed)
-        default_map = cat_mgr._load_default_categories()
-        user_map = cat_mgr._load_user_categories()
-        
-        unknown = [
-            m for m in df['merchant'].unique()
-            if m and (
-                m not in cat_mgr.category_map or
-                (m in default_map and m not in user_map)
-            )
-        ]
-
         flat_choices = [
             (cat, sub)
             for cat, subs in cat_mgr.valid_categories.items()
             for sub in subs
+        ]
+        valid_pairs = set(flat_choices)
+
+        # Detect merchants mapped to categories that no longer exist in the template
+        stale = [
+            m for m in df['merchant'].unique()
+            if m and m in cat_mgr.category_map
+            and (cat_mgr.category_map[m][0], cat_mgr.category_map[m][1]) not in valid_pairs
+        ]
+        for merchant in stale:
+            old_cat, old_sub = cat_mgr.category_map[merchant]
+            self.log_message.emit('WARNING', f'Stale mapping: {merchant} -> {old_cat}/{old_sub} (not in template)')
+
+        # Include merchants that need user input:
+        # 1. Not in category_map at all
+        # 2. From default categories only (not user-confirmed)
+        # 3. Mapped to stale categories no longer in the template
+        default_map = cat_mgr._load_default_categories()
+        user_map = cat_mgr._load_user_categories()
+        stale_set = set(stale)
+
+        unknown = [
+            m for m in df['merchant'].unique()
+            if m and (
+                m not in cat_mgr.category_map
+                or (m in default_map and m not in user_map)
+                or m in stale_set
+            )
         ]
 
         total_unknown = len(unknown)
@@ -1355,8 +1369,8 @@ class BudgetTrackerGUI(QMainWindow):
         # Initialize translations
         self.translations = Translations(language)
 
-        # Setup logging
-        ensure_dirs([APPDATA_DIR])
+        # Setup logging and ensure directories exist
+        ensure_dirs([APPDATA_DIR, TRANSACTIONS_DIR])
         from src.config import get_log_level
         setup_logging(APPDATA_DIR, LOG_FILE_NAME, log_level=get_log_level())
 
@@ -1441,7 +1455,7 @@ class BudgetTrackerGUI(QMainWindow):
         (chart, table, logs, archive), action buttons, and status bar. Sets RTL
         layout for Hebrew language. Loads dashboard data and performs startup validation.
         """
-        self.setWindowTitle(self.translations.get('app_title'))
+        self.setWindowTitle(f"{self.translations.get('app_title')} v{APP_VERSION}")
         
         # Set default window size
         self.resize(1200, 800)
@@ -2337,12 +2351,13 @@ class BudgetTrackerGUI(QMainWindow):
                 if reply == QMessageBox.StandardButton.No:
                     return
 
-        # Store hashes for saving after successful processing
+        # Store hashes and file list for saving/archiving after successful processing
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self._pending_hashes = {
             h: {'filename': fp.name, 'date': now}
             for fp, h in file_hashes.items()
         }
+        self._pending_files = list(file_hashes.keys())
 
         # Disable button during processing
         self.process_btn.setEnabled(False)
@@ -2474,6 +2489,7 @@ class BudgetTrackerGUI(QMainWindow):
 
             # Write to dashboard
             self.log_viewer.add_log('INFO', 'Writing to dashboard...')
+            dashboard_ok = False
             try:
                 # Check if dashboard is locked before writing
                 if is_file_locked(DASHBOARD_FILE_PATH):
@@ -2488,9 +2504,10 @@ class BudgetTrackerGUI(QMainWindow):
                     writer = DashboardWriter(DASHBOARD_FILE_PATH)
                     writer.update(summary_df, conflict_resolver=self.resolve_conflict)
                     self.log_viewer.add_log('INFO', 'Dashboard updated successfully')
-                    
-                    # Update dashboard info label after write
-                    self.update_dashboard_info_label()
+                    dashboard_ok = True
+
+                    # Reload full dashboard so UI reflects the complete picture
+                    self.load_dashboard_data()
             except (PermissionError, IOError, OSError) as e:
                 error_msg = get_user_friendly_error(e)
                 self.log_viewer.add_log('ERROR', f'Failed to write dashboard: {str(e)}')
@@ -2508,25 +2525,37 @@ class BudgetTrackerGUI(QMainWindow):
                     f"Error updating dashboard:\n\n{error_msg}"
                 )
 
-            # Record processed file hashes
-            if hasattr(self, '_pending_hashes') and self._pending_hashes:
-                from src.file_manager import _load_processed_hashes, _save_processed_hashes
-                hashes = _load_processed_hashes()
-                hashes.update(self._pending_hashes)
-                _save_processed_hashes(hashes)
-                self.log_viewer.add_log('INFO', f'Recorded {len(self._pending_hashes)} processed file hash(es)')
-                self._pending_hashes = {}
+            # Only record hashes and archive files when the dashboard was written successfully
+            if dashboard_ok:
+                if hasattr(self, '_pending_hashes') and self._pending_hashes:
+                    from src.file_manager import _load_processed_hashes, _save_processed_hashes
+                    hashes = _load_processed_hashes()
+                    hashes.update(self._pending_hashes)
+                    _save_processed_hashes(hashes)
+                    self.log_viewer.add_log('INFO', f'Recorded {len(self._pending_hashes)} processed file hash(es)')
+                    self._pending_hashes = {}
+
+                if hasattr(self, '_pending_files') and self._pending_files:
+                    from src.file_manager import archive_files
+                    for fp in self._pending_files:
+                        if fp.exists():
+                            archive_files(fp.name)
+                    self.log_viewer.add_log('INFO', f'Archived {len(self._pending_files)} file(s) to backup')
+                    self._pending_files = []
 
             # Refresh archive
             self.refresh_archive()
             self.refresh_files()
 
-            self.statusBar().showMessage(self.translations.get('processing_complete'))
-            QMessageBox.information(
-                self,
-                self.translations.get('success_title'),
-                self.translations.get('processing_complete')
-            )
+            if dashboard_ok:
+                self.statusBar().showMessage(self.translations.get('processing_complete'))
+                QMessageBox.information(
+                    self,
+                    self.translations.get('success_title'),
+                    self.translations.get('processing_complete')
+                )
+            else:
+                self.statusBar().showMessage(self.translations.get('warning_title'))
 
     def processing_error(self, error_msg: str):
         """

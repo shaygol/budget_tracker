@@ -4,11 +4,13 @@ import sys
 
 # Base directory is the parent of the 'src' directory (root of repo)
 if getattr(sys, 'frozen', False):
-    # If running as compiled exe, use the executable's directory
     BASE_DIR = Path(sys.executable).parent.resolve()
 else:
-    # If running as script, use the standard path
     BASE_DIR = Path(__file__).parent.parent.resolve()
+
+# App version (read from VERSION file, fallback to 'dev')
+_version_file = BASE_DIR / 'VERSION'
+APP_VERSION = _version_file.read_text(encoding='utf-8').strip() if _version_file.exists() else 'dev'
 
 # User Files Directory
 USER_FILES_DIR = BASE_DIR / 'UserFiles'
@@ -16,7 +18,7 @@ USER_FILES_DIR = BASE_DIR / 'UserFiles'
 # Subdirectories
 APPDATA_DIR = BASE_DIR / 'appdata'
 BACKUPS_ROOT = USER_FILES_DIR / 'backups'
-TRANSACTIONS_DIR = BACKUPS_ROOT
+TRANSACTIONS_DIR = APPDATA_DIR / 'pending'
 ARCHIVE_DIR = BACKUPS_ROOT / 'transactions'
 DASHBOARD_BACKUP_DIR = BACKUPS_ROOT / 'dashboards'
 
@@ -96,6 +98,5 @@ FILE_HEADER_KEYWORDS = {
 MAX_FILE_SIZE_MB = 50  # Maximum file size for supported transaction files
 MAX_CATEGORIES = 10000  # Maximum number of categories to prevent unbounded growth
 MAX_MERCHANT_NAME_LENGTH = 200  # Maximum length for merchant names
-ALLOWED_FILE_EXTENSIONS = ['.xlsx', '.xls', '.pdf']
 BACKUP_SUFFIX = '.backup'
 PROCESSING_TIMEOUT_SECONDS = 300  # 5 minutes max processing time

@@ -10,6 +10,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from src.config import TEMPLATE_SHEET_NAME, DASHBOARD_BACKUP_DIR
 
 logger = logging.getLogger(__name__)
+SUMMARY_LABELS = {"Summary", "סיכום"}
 
 
 class DashboardWriter:
@@ -65,7 +66,9 @@ class DashboardWriter:
             # Ensure backup directory exists
             os.makedirs(DASHBOARD_BACKUP_DIR, exist_ok=True)
 
-            backup_filename = f"{Path(self.dashboard_path).name}.{timestamp}.backup"
+            stem = Path(self.dashboard_path).stem
+            suffix = Path(self.dashboard_path).suffix
+            backup_filename = f"{stem}_{timestamp}{suffix}"
             backup_path = DASHBOARD_BACKUP_DIR / backup_filename
 
             shutil.copy2(self.dashboard_path, backup_path)
@@ -93,19 +96,17 @@ class DashboardWriter:
                 logger.error(f"Template sheet '{self.template_sheet_name}' not found in dashboard.")
                 return
 
-            # First pass: create sheets per year if missing
             for year in years:
                 sheet_name = str(year)
                 if sheet_name not in wb.sheetnames:
                     self._clone_template_sheet(wb, sheet_name)
 
+                ws = wb[sheet_name]
+                self._populate_sheet(ws, year, summary_df[summary_df['year'] == year])
+
             wb.save(self.dashboard_path)
         finally:
             wb.close()
-
-        # Second pass: update each year's sheet
-        for year in years:
-            self._update_sheet(year, summary_df[summary_df['year'] == year])
 
     def _validate_summary(self, df: pd.DataFrame) -> bool:
         required_cols = {'year', 'month', 'category', 'subcat', 'monthly_amount'}
@@ -168,73 +169,64 @@ class DashboardWriter:
         target.sheet_view.rightToLeft = source.sheet_view.rightToLeft
         logger.info(f"Created new sheet by cloning template: {new_sheet_name}")
 
-    def _update_sheet(self, year: int, df: pd.DataFrame) -> None:
-        wb = load_workbook(self.dashboard_path)
-        try:
-            sheet_name = str(year)
-            ws = wb[sheet_name]
+    def _populate_sheet(self, ws: Worksheet, year: int, df: pd.DataFrame) -> None:
+        # Map month numbers to column indexes (e.g., Jan -> col 3)
+        month_columns = {str(m): 2 + (m - 1) for m in range(1, 13)}
 
-            # Map month numbers to column indexes (e.g., Jan -> col 3)
-            month_columns = {str(m): 2 + (m - 1) for m in range(1, 13)}
+        # Build mapping of existing subcategories to rows
+        category_ranges = self._get_category_row_ranges(ws)
+        existing_map = self._build_subcat_location_map(ws, category_ranges)
 
-            # Build mapping of existing subcategories to rows
-            category_ranges = self._get_category_row_ranges(ws)
-            existing_map = self._build_subcat_location_map(ws, category_ranges)
+        for _, row in df.iterrows():
+            cat = row['category']
+            subcat = row['subcat']
+            month = str(int(row['month']))
+            amount = row['monthly_amount']
+            col = month_columns[month]
 
-            for _, row in df.iterrows():
-                cat = row['category']
-                subcat = row['subcat']
-                month = str(int(row['month']))
-                amount = row['monthly_amount']
-                col = month_columns[month]
+            if cat not in category_ranges:
+                logger.info(f"New category detected: {cat}. Adding it.")
+                self._add_new_category(ws, cat)
+                category_ranges = self._get_category_row_ranges(ws)
 
-                if cat not in category_ranges:
-                    logger.info(f"New category detected: {cat}. Adding it.")
-                    self._add_new_category(ws, cat)
-                    category_ranges = self._get_category_row_ranges(ws)
+            if (cat, subcat) not in existing_map:
+                logger.info(f"New subcategory '{subcat}' under '{cat}' detected. Adding it.")
+                self._add_new_subcategory(ws, cat, subcat, existing_map, category_ranges)
+                existing_map = self._build_subcat_location_map(ws, category_ranges)
 
-                if (cat, subcat) not in existing_map:
-                    logger.info(f"New subcategory '{subcat}' under '{cat}' detected. Adding it.")
-                    self._add_new_subcategory(ws, cat, subcat, existing_map, category_ranges)
-                    existing_map = self._build_subcat_location_map(ws, category_ranges)
+            row_idx = existing_map[(cat, subcat)]
+            cell = ws.cell(row=row_idx, column=col + 1)
+            existing_value = cell.value
 
-                row_idx = existing_map[(cat, subcat)]
-                cell = ws.cell(row=row_idx, column=col + 1)
-                existing_value = cell.value
-
-                if existing_value is not None and existing_value != 0:
-                    month_key = f"{year}-{month}"
-                    if month_key not in self.user_decisions:
-                        decision = self._prompt_user_decision(month_key, self.conflict_resolver)
-                        self.user_decisions[month_key] = decision
-                    else:
-                        decision = self.user_decisions[month_key]
-
-                    if decision == "override":
-                        logger.debug(f"Overriding cell {cell.coordinate} with {amount}")
-                        cell.value = amount
-                    elif decision == "add":
-                        try:
-                            new_val = float(existing_value) + amount
-                            logger.debug(f"Adding to cell {cell.coordinate}: {existing_value} + {amount} = {new_val}")
-                            cell.value = new_val
-                        except Exception:
-                            cell.value = amount
-                    elif decision == "skip":
-                        logger.debug(f"Skipping cell {cell.coordinate}")
-                        continue
+            if existing_value is not None and existing_value != 0 and existing_value != "":
+                month_key = f"{year}-{month}"
+                if month_key not in self.user_decisions:
+                    decision = self._prompt_user_decision(month_key, self.conflict_resolver)
+                    self.user_decisions[month_key] = decision
                 else:
-                    # No existing value, safe to write
-                    logger.debug(f"Writing to new cell {cell.coordinate}: {amount}")
+                    decision = self.user_decisions[month_key]
+
+                if decision == "override":
+                    logger.debug(f"Overriding cell {cell.coordinate} with {amount}")
                     cell.value = amount
+                elif decision == "add":
+                    try:
+                        new_val = float(existing_value) + amount
+                        logger.debug(f"Adding to cell {cell.coordinate}: {existing_value} + {amount} = {new_val}")
+                        cell.value = new_val
+                    except Exception:
+                        cell.value = amount
+                elif decision == "skip":
+                    logger.debug(f"Skipping cell {cell.coordinate}")
+                    continue
+            else:
+                logger.debug(f"Writing to new cell {cell.coordinate}: {amount}")
+                cell.value = amount
 
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-                cell.font = Font(bold=False)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=False)
 
-            wb.save(self.dashboard_path)
-        finally:
-            wb.close()
-        logger.info(f"Dashboard sheet updated for year {year}")
+        logger.info(f"Dashboard sheet populated for year {year}")
 
 
     def _prompt_user_decision(self, month_key: str, conflict_resolver: Optional[Callable[[str], str]] = None) -> str:
@@ -254,15 +246,19 @@ class DashboardWriter:
         ranges = {}
         current_cat = None
         start = None
-        for idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
-            cat_cell = row[0]
-            if cat_cell.value:
-                if current_cat and start:
+        summary_row = self._find_summary_row(ws)
+        last_data_row = (summary_row - 1) if summary_row else ws.max_row
+
+        for idx in range(2, last_data_row + 1):
+            cat_value = ws.cell(row=idx, column=1).value
+            if cat_value:
+                if current_cat and start is not None:
                     ranges[current_cat] = (start, idx - 1)
-                current_cat = cat_cell.value
+                current_cat = cat_value
                 start = idx
-        if current_cat and start:
-            ranges[current_cat] = (start, idx)
+
+        if current_cat and start is not None:
+            ranges[current_cat] = (start, last_data_row)
         return ranges
 
     def _build_subcat_location_map(self, ws: Worksheet, cat_ranges: Dict[str, Tuple[int, int]]) -> Dict[Tuple[str, str], int]:
@@ -272,7 +268,7 @@ class DashboardWriter:
             for r in range(start, end + 1):
                 subcat_cell = ws.cell(row=r, column=2)
                 val = subcat_cell.value
-                if isinstance(val, str):
+                if isinstance(val, str) and val.strip():
                     clean_subcat = val.strip()
                     mapping[(cat, clean_subcat)] = r
                     logger.debug(f"Mapped: ({cat}, {clean_subcat}) -> row {r}")
@@ -280,27 +276,22 @@ class DashboardWriter:
         return mapping
 
     def _add_new_category(self, ws: Worksheet, category: str) -> None:
-        # Adds a new row for a new category at the bottom
-        last_row = ws.max_row + 1
-        ws.insert_rows(last_row)
-        ws.cell(row=last_row, column=1, value=category)
+        # Add new categories before the summary row so formulas continue to include them.
+        summary_row = self._find_summary_row(ws)
+        insert_at = summary_row if summary_row else ws.max_row + 1
+        self._insert_rows_preserving_merges(ws, insert_at)
+        ws.cell(row=insert_at, column=1, value=category)
         for col in range(2, 15):
-            ws.cell(row=last_row, column=col, value="")
+            ws.cell(row=insert_at, column=col, value="")
 
     def _add_new_subcategory(self, ws: Worksheet, category: str, subcat: str,
                              subcat_map: Dict[Tuple[str, str], int], cat_ranges: Dict[str, Tuple[int, int]]) -> None:
-        # Inserts a subcategory row below the existing category group
+        # Insert the new subcategory below the category group and above the summary row.
         start, end = cat_ranges[category]
-
-        # Try to insert before the last row to preserve formulas (if range > 1 row)
-        # This helps Excel expand ranges like SUM(C5:C10) -> SUM(C5:C11)
-        if end > start:
-            insert_at = end
-        else:
-            insert_at = end + 1
+        insert_at = end + 1
 
         logger.debug(f"Inserting new subcategory '{subcat}' at row {insert_at} (Category range: {start}-{end})")
-        ws.insert_rows(insert_at)
+        self._insert_rows_preserving_merges(ws, insert_at)
         ws.cell(row=insert_at, column=2, value=subcat)
         for col in range(3, 15):
             ws.cell(row=insert_at, column=col, value="")
@@ -309,3 +300,54 @@ class DashboardWriter:
             ws.unmerge_cells(start_row=start, end_row=end, start_column=1, end_column=1)
         ws.merge_cells(start_row=start, end_row=end + 1, start_column=1, end_column=1)
         cat_ranges[category] = (start, end + 1)
+
+    def _find_summary_row(self, ws: Worksheet) -> Optional[int]:
+        """Find the summary row that is kept at the bottom of the dashboard."""
+        for merged_range in ws.merged_cells.ranges:
+            if (
+                merged_range.min_col == 1
+                and merged_range.max_col == 2
+                and merged_range.min_row == merged_range.max_row
+            ):
+                value = ws.cell(row=merged_range.min_row, column=1).value
+                if isinstance(value, str) and value.strip() in SUMMARY_LABELS:
+                    return merged_range.min_row
+
+        for row_idx in range(2, ws.max_row + 1):
+            value = ws.cell(row=row_idx, column=1).value
+            if isinstance(value, str) and value.strip() in SUMMARY_LABELS:
+                return row_idx
+
+        return None
+
+    def _insert_rows_preserving_merges(self, ws: Worksheet, insert_at: int, amount: int = 1) -> None:
+        """Insert rows while keeping merged ranges aligned with their logical content."""
+        merged_ranges = [
+            (rng.min_row, rng.max_row, rng.min_col, rng.max_col)
+            for rng in list(ws.merged_cells.ranges)
+        ]
+
+        for min_row, max_row, min_col, max_col in merged_ranges:
+            ws.unmerge_cells(
+                start_row=min_row,
+                end_row=max_row,
+                start_column=min_col,
+                end_column=max_col,
+            )
+
+        ws.insert_rows(insert_at, amount)
+
+        for min_row, max_row, min_col, max_col in merged_ranges:
+            if max_row < insert_at:
+                new_min_row, new_max_row = min_row, max_row
+            elif min_row >= insert_at:
+                new_min_row, new_max_row = min_row + amount, max_row + amount
+            else:
+                new_min_row, new_max_row = min_row, max_row + amount
+
+            ws.merge_cells(
+                start_row=new_min_row,
+                end_row=new_max_row,
+                start_column=min_col,
+                end_column=max_col,
+            )
