@@ -211,3 +211,46 @@ def test_dashboard_writer_update_adds_new_subcategory_before_summary_row(temp_di
     assert ws["B3"].value == "Dining"
     assert ws["C3"].value == 50.0
     wb.close()
+
+
+def test_dashboard_writer_unmerges_legacy_month_cells_before_write(temp_dir, monkeypatch):
+    """Writing to a merged month cell should unmerge first instead of crashing."""
+    backup_dir = temp_dir / "dash_backups"
+    backup_dir.mkdir()
+    monkeypatch.setattr("src.dashboard_writer.DASHBOARD_BACKUP_DIR", backup_dir)
+
+    dashboard_path = temp_dir / "dashboard.xlsx"
+    wb = Workbook()
+    template = wb.active
+    template.title = "Template"
+    template["A1"] = "Category"
+    template["B1"] = "Subcategory"
+    template["C1"] = 1
+    template["A2"] = "Food"
+    template["B2"] = "Groceries"
+    template["A3"] = "Summary"
+    template.merge_cells("A3:B3")
+
+    sheet_2024 = wb.copy_worksheet(template)
+    sheet_2024.title = "2024"
+    sheet_2024.merge_cells("C2:N2")
+    wb.save(dashboard_path)
+
+    summary_df = pd.DataFrame({
+        "year": [2024],
+        "month": [12],
+        "category": ["Food"],
+        "subcat": ["Groceries"],
+        "monthly_amount": [321.0],
+    })
+
+    writer = DashboardWriter(dashboard_path)
+    writer.update(summary_df, conflict_resolver=lambda _: "override")
+
+    wb_after = load_workbook(dashboard_path)
+    ws = wb_after["2024"]
+    assert "C2:N2" not in {str(rng) for rng in ws.merged_cells.ranges}
+    assert ws["N2"].value == 321.0
+    wb_after.close()
+
+

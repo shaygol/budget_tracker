@@ -74,6 +74,30 @@ def test_category_manager_saves_categories(temp_dir):
     assert saved['NewMerchant'] == ['Category', 'Subcategory']
 
 
+def test_category_manager_saves_explicitly_confirmed_default_mapping(temp_dir, monkeypatch):
+    """Default mapping confirmed by user should be persisted."""
+    categories_file = temp_dir / 'categories.json'
+    categories_file.write_text('{}', encoding='utf-8')
+
+    dashboard_file = temp_dir / 'dashboard.xlsx'
+    create_dashboard_with_template(dashboard_file)
+
+    manager = CategoryManager(categories_file, dashboard_file)
+    monkeypatch.setattr(
+        manager,
+        '_load_default_categories',
+        lambda: {'Merchant1': ['Food', 'Groceries']}
+    )
+    manager.category_map = {'Merchant1': ['Food', 'Groceries']}
+    manager.mark_user_confirmed('Merchant1')
+    manager.save_categories()
+
+    with open(categories_file, 'r', encoding='utf-8') as f:
+        saved = json.load(f)
+
+    assert saved['Merchant1'] == ['Food', 'Groceries']
+
+
 def test_category_manager_maps_known_merchants(temp_dir, sample_categories):
     """Test that known merchants are mapped correctly."""
     categories_file = temp_dir / 'categories.json'
