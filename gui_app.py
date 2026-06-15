@@ -504,7 +504,7 @@ class CategoryDialog(QDialog):
 class ConflictDialog(QDialog):
     """Dialog for resolving data conflicts."""
 
-    def __init__(self, month_key: str, translations: Translations, parent=None):
+    def __init__(self, month_key: str, translations: Translations, parent=None, conflicts_info: list = None):
         """
         Initialize conflict resolution dialog.
 
@@ -512,6 +512,7 @@ class ConflictDialog(QDialog):
             month_key: Month identifier string (e.g., "2024-01")
             translations: Translations object for localized UI text
             parent: Parent widget (optional)
+            conflicts_info: Optional list of conflict dictionaries
         """
         super().__init__(parent)
         self.month_key = month_key
@@ -520,14 +521,47 @@ class ConflictDialog(QDialog):
 
         self.setWindowTitle(self.translations.get('conflict_title'))
         self.setModal(True)
-        self.resize(400, 200)
+        self.resize(500, 300)
 
         layout = QVBoxLayout()
 
+        # Format month_key
+        try:
+            year, month = month_key.split('-')
+            formatted_month = f"{int(month):02d}/{year}"
+        except:
+            formatted_month = month_key
+
         # Message
-        msg = QLabel(self.translations.get('conflict_message', month_key=month_key))
+        msg = QLabel(self.translations.get('conflict_message', month_key=formatted_month))
         msg.setFont(QFont('Arial', 11))
         layout.addWidget(msg)
+
+        if conflicts_info:
+            conflicts_text = QTextEdit()
+            conflicts_text.setReadOnly(True)
+            
+            # Format conflicts for display
+            text_lines = []
+            for c in conflicts_info:
+                text_lines.append(f"• {c['category']} ➔ {c['subcat']}:")
+                try:
+                    text_lines.append(f"    {self.translations.get('existing', 'Existing')}: ₪{float(c['existing']):,.2f}")
+                except (ValueError, TypeError):
+                    text_lines.append(f"    {self.translations.get('existing', 'Existing')}: {c['existing']}")
+                try:
+                    text_lines.append(f"    {self.translations.get('new_amount', 'New')}: ₪{float(c['new']):,.2f}")
+                except (ValueError, TypeError):
+                    text_lines.append(f"    {self.translations.get('new_amount', 'New')}: {c['new']}")
+                text_lines.append("")
+                
+            conflicts_text.setText("\n".join(text_lines))
+            
+            # Adjust alignment based on RTL
+            if self.translations.is_rtl():
+                conflicts_text.setAlignment(Qt.AlignmentFlag.AlignRight)
+                
+            layout.addWidget(conflicts_text)
 
         # Buttons
         override_btn = QPushButton(self.translations.get('override_btn'))
@@ -2250,7 +2284,7 @@ class BudgetTrackerGUI(QMainWindow):
         """
         self.statusBar().showMessage(message)
 
-    def resolve_conflict(self, month_key: str) -> str:
+    def resolve_conflict(self, month_key: str, conflicts_info: list = None) -> str:
         """
         Resolve data conflict via GUI dialog.
 
@@ -2258,11 +2292,12 @@ class BudgetTrackerGUI(QMainWindow):
 
         Args:
             month_key: Month identifier string (e.g., "2024-01")
+            conflicts_info: Optional list of conflict details
 
         Returns:
             User's decision: "override", "add", or "skip"
         """
-        dialog = ConflictDialog(month_key, self.translations, self)
+        dialog = ConflictDialog(month_key, self.translations, self, conflicts_info)
         dialog.exec()
         return dialog.decision
 

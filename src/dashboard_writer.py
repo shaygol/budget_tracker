@@ -181,6 +181,31 @@ class DashboardWriter:
             category_ranges = self._get_category_row_ranges(ws)
             existing_map = self._build_subcat_location_map(ws, category_ranges)
 
+            # Pre-calculate conflicts for the whole year
+            conflicts_by_month = {}
+            for _, row in df.iterrows():
+                cat = row['category']
+                subcat = row['subcat']
+                month = str(int(row['month']))
+                amount = row['monthly_amount']
+                col = month_columns.get(month)
+                if not col:
+                    continue
+
+                if (cat, subcat) in existing_map:
+                    row_idx = existing_map[(cat, subcat)]
+                    cell_value = ws.cell(row=row_idx, column=col + 1).value
+                    if cell_value is not None and cell_value != 0:
+                        month_key = f"{year}-{month}"
+                        if month_key not in conflicts_by_month:
+                            conflicts_by_month[month_key] = []
+                        conflicts_by_month[month_key].append({
+                            'category': cat,
+                            'subcat': subcat,
+                            'existing': cell_value,
+                            'new': amount
+                        })
+
             for _, row in df.iterrows():
                 cat = row['category']
                 subcat = row['subcat']
@@ -205,7 +230,8 @@ class DashboardWriter:
                 if existing_value is not None and existing_value != 0:
                     month_key = f"{year}-{month}"
                     if month_key not in self.user_decisions:
-                        decision = self._prompt_user_decision(month_key, self.conflict_resolver)
+                        conflicts = conflicts_by_month.get(month_key, [])
+                        decision = self._prompt_user_decision(month_key, self.conflict_resolver, conflicts)
                         self.user_decisions[month_key] = decision
                     else:
                         decision = self.user_decisions[month_key]
@@ -237,12 +263,23 @@ class DashboardWriter:
         logger.info(f"Dashboard sheet updated for year {year}")
 
 
-    def _prompt_user_decision(self, month_key: str, conflict_resolver: Optional[Callable[[str], str]] = None) -> str:
+    def _prompt_user_decision(self, month_key: str, conflict_resolver: Optional[Callable] = None, conflicts_info: list = None) -> str:
         # Use callback if provided (GUI mode), otherwise use input (CLI mode)
         if conflict_resolver:
-            return conflict_resolver(month_key)
+            import inspect
+            sig = inspect.signature(conflict_resolver)
+            if len(sig.parameters) >= 2:
+                return conflict_resolver(month_key, conflicts_info)
+            else:
+                return conflict_resolver(month_key)
 
         print(f"\nData already exists for {month_key}. Choose how to handle it:")
+        if conflicts_info:
+            print(f"Conflicts ({len(conflicts_info)} found):")
+            for c in conflicts_info[:3]:
+                print(f"  {c['category']} -> {c['subcat']}: Existing {c['existing']}, New {c['new']}")
+            if len(conflicts_info) > 3:
+                print(f"  ... and {len(conflicts_info) - 3} more")
         print("1. Override existing data")
         print("2. Add to existing data")
         print("3. Skip this month")
